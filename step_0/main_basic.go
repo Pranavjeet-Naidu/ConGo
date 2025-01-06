@@ -49,9 +49,20 @@ func child() {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-
+	if _, err := os.Stat("/home/liz/ubuntufs"); os.IsNotExist(err) {
+		panic("Root filesystem directory does not exist! Please create it before running the program.")
+	}
+	
 	must(syscall.Sethostname([]byte("container")))
-	must(syscall.Chroot("/home/liz/ubuntufs"))
+	must(syscall.Chroot("/home/pj/ubuntufs")) 
+	// in order for the chroot setup to work , we need to create the directory and then populate it with the rootfs
+	// the below commands can be used to create this setup using debootstrap
+	// sudo apt-get install debootstrap 
+	// sudo debootstrap stable /home/pj/ubuntufs http://deb.debian.org/debian/
+	// or you can use alpine linux : just run these commands 
+	// wget https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-minirootfs-latest-x86_64.tar.gz
+	// sudo tar -xzf alpine-minirootfs-latest-x86_64.tar.gz -C /home/liz/ubuntufs
+
 	must(os.Chdir("/"))
 	must(syscall.Mount("proc", "proc", "proc", 0, ""))
 	must(syscall.Mount("thing", "mytemp", "tmpfs", 0, ""))
