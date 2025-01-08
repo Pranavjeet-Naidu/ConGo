@@ -49,7 +49,7 @@ func child() {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if _, err := os.Stat("/home/liz/ubuntufs"); os.IsNotExist(err) {
+	if _, err := os.Stat("/home/pj/ubuntufs"); os.IsNotExist(err) {
 		panic("Root filesystem directory does not exist! Please create it before running the program.")
 	}
 	
@@ -61,7 +61,7 @@ func child() {
 	// sudo debootstrap stable /home/pj/ubuntufs http://deb.debian.org/debian/
 	// or you can use alpine linux : just run these commands 
 	// wget https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-minirootfs-latest-x86_64.tar.gz
-	// sudo tar -xzf alpine-minirootfs-latest-x86_64.tar.gz -C /home/liz/ubuntufs
+	// sudo tar -xzf alpine-minirootfs-latest-x86_64.tar.gz -C /home/pj/ubuntufs
 
 	must(os.Chdir("/"))
 	must(syscall.Mount("proc", "proc", "proc", 0, ""))
@@ -77,11 +77,11 @@ func child() {
 func cg() {
 	cgroups := "/sys/fs/cgroup/"
 	pids := filepath.Join(cgroups, "pids")
-	os.Mkdir(filepath.Join(pids, "liz"), 0755)
-	must(ioutil.WriteFile(filepath.Join(pids, "liz/pids.max"), []byte("20"), 0700))
+	os.Mkdir(filepath.Join(pids, "pj"), 0755)
+	must(ioutil.WriteFile(filepath.Join(pids, "pj/pids.max"), []byte("20"), 0700))
 	// Removes the new cgroup in place after the container exits
-	must(ioutil.WriteFile(filepath.Join(pids, "liz/notify_on_release"), []byte("1"), 0700))
-	must(ioutil.WriteFile(filepath.Join(pids, "liz/cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700))
+	must(ioutil.WriteFile(filepath.Join(pids, "pj/notify_on_release"), []byte("1"), 0700))
+	must(ioutil.WriteFile(filepath.Join(pids, "pj/cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700))
 }
 
 func must(err error) {

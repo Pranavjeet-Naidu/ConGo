@@ -1,4 +1,3 @@
-
 # Container Runtime README
 
 This repository provides a simple container runtime written in Go. It leverages Linux namespaces, cgroups, and chroot to isolate processes. Below is an overview of how to use and understand the code.
@@ -44,6 +43,22 @@ Where:
 - `1024` is the CPU share.
 - `KEY=VALUE,FOO=BAR` specifies environment variables.
 - `/bin/bash` (or similar) is the program to execute inside the container.
+
+## Root Filesystem Setup
+
+In order for the chroot setup to work, you need to create the directory and populate it with the rootfs. For a Debian-based rootfs:
+
+```bash
+sudo apt-get install debootstrap
+sudo debootstrap stable /home/pj/ubuntufs http://deb.debian.org/debian/
+```
+
+Or using Alpine Linux:
+
+```bash
+wget https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-minirootfs-latest-x86_64.tar.gz
+sudo tar -xzf alpine-minirootfs-latest-x86_64.tar.gz -C /home/liz/ubuntufs
+```
 
 ## Notes
 
