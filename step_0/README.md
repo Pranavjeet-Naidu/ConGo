@@ -1,2 +1,0 @@
-Summary
-This program creates a simple container-like environment by isolating the execution of a command in new namespaces and setting up control groups to limit resources. It uses system calls to change the root filesystem, set the hostname, and mount necessary filesystems.

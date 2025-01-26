@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	//"io/ioutil" this was part of the original but is deprecated now 
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,10 +78,10 @@ func cg() {
 	cgroups := "/sys/fs/cgroup/"
 	pids := filepath.Join(cgroups, "pids")
 	os.Mkdir(filepath.Join(pids, "pj"), 0755)
-	must(ioutil.WriteFile(filepath.Join(pids, "pj/pids.max"), []byte("20"), 0700))
+	must(os.WriteFile(filepath.Join(pids, "pj/pids.max"), []byte("20"), 0700))
 	// Removes the new cgroup in place after the container exits
-	must(ioutil.WriteFile(filepath.Join(pids, "pj/notify_on_release"), []byte("1"), 0700))
-	must(ioutil.WriteFile(filepath.Join(pids, "pj/cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700))
+	must(os.WriteFile(filepath.Join(pids, "pj/notify_on_release"), []byte("1"), 0700))
+	must(os.WriteFile(filepath.Join(pids, "pj/cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0700))
 }
 
 func must(err error) {
