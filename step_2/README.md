@@ -1,4 +1,4 @@
-# Container Runtime README
+# step_2
 
 This repository provides a simple container runtime written in Go. It leverages Linux namespaces, cgroups, and chroot to isolate processes. Below is an overview of how to use and understand the code.
 
@@ -15,7 +15,7 @@ This repository provides a simple container runtime written in Go. It leverages 
 Make sure you have Go installed. Then run:
 
 ```bash
-cd /home/grass/projects/rust/congo/step_2
+cd /home/grass/projects/congo/step_2
 go build -o container-runtime main.go
 ```
 
@@ -52,7 +52,7 @@ wget https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/alpine-
 sudo tar -xzf alpine-minirootfs-latest-x86_64.tar.gz -C /home/liz/ubuntufs
 ```
 
-## Changes from Step 1
+## new changes
 
 1. **OverlayFS Support**: The runtime now supports using OverlayFS for layered filesystems.
 2. **Bind Mounts**: The runtime supports bind mounting directories into the container.
