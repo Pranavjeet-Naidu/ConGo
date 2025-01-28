@@ -9,6 +9,7 @@ This repository provides a simple container runtime written in Go. It leverages 
 - **Chroot & Mounts:** The code sets up a new root filesystem and mounts essential directories such as `/proc` and `/tmp`.
 - **OverlayFS:** The runtime now supports using OverlayFS for layered filesystems.
 - **Bind Mounts:** The runtime supports bind mounting directories into the container.
+- **User Switching:** The runtime supports running commands as a specified user.
 
 ## Building
 
@@ -24,7 +25,7 @@ go build -o container-runtime main.go
 Run the following command to create a new container environment:
 
 ```bash
-go run main.go run <rootfs> <process_limit> <memory_limit> <cpu_share> <env_vars> [--mount source:dest[:ro]] [--layers layer1,layer2] -- <cmd> <args>
+go run main.go run <rootfs> <process_limit> <memory_limit> <cpu_share> <env_vars> [--mount source:dest[:ro]] [--layers layer1,layer2] [--user username] -- <cmd> <args>
 ```
 Where:
 - `/path/to/rootfs` is the root filesystem for the container.
@@ -34,6 +35,7 @@ Where:
 - `KEY=VALUE,FOO=BAR` specifies environment variables.
 - `[--mount source:dest[:ro]]` specifies bind mounts (optional).
 - `[--layers layer1,layer2]` specifies OverlayFS layers (optional).
+- `[--user username]` specifies the user to run the command as (optional).
 - `/bin/bash` (or similar) is the program to execute inside the container.
 
 ## Root Filesystem Setup
@@ -56,10 +58,11 @@ sudo tar -xzf alpine-minirootfs-latest-x86_64.tar.gz -C /home/liz/ubuntufs
 
 1. **OverlayFS Support**: The runtime now supports using OverlayFS for layered filesystems.
 2. **Bind Mounts**: The runtime supports bind mounting directories into the container.
-3. **Configuration Parsing**: The `parseConfig` function has been updated to handle new command-line arguments for bind mounts and OverlayFS layers.
-4. **Setup Functions**: New functions `setupLayeredRootfs` and `performBindMounts` have been added to handle the setup of OverlayFS and bind mounts, respectively.
-5. **Cleanup Function**: A `cleanup` function has been added to clean up cgroups and unmount filesystems after the container exits.
-6. **Updated Usage**: The usage instructions now include options for bind mounts and OverlayFS layers.
+3. **User Switching**: The runtime supports running commands as a specified user.
+4. **Configuration Parsing**: The `parseConfig` function has been updated to handle new command-line arguments for bind mounts, OverlayFS layers, and user switching.
+5. **Setup Functions**: New functions `setupLayeredRootfs`, `performBindMounts`, and `setupUser` have been added to handle the setup of OverlayFS, bind mounts, and user switching, respectively.
+6. **Cleanup Function**: A `cleanup` function has been added to clean up cgroups and unmount filesystems after the container exits.
+7. **Updated Usage**: The usage instructions now include options for bind mounts, OverlayFS layers, and user switching.
 
 ## Notes
 

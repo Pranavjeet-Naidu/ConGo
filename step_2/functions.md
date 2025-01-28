@@ -24,7 +24,7 @@
 
 - Parses command-line arguments to create a `Config` struct.
 - Handles both parent and child process argument parsing.
-- Supports additional arguments for bind mounts and OverlayFS layers.
+- Supports additional arguments for bind mounts, OverlayFS layers, and user switching.
 
 ## setupContainer(config *Config) error
 
@@ -32,6 +32,7 @@
 - Calls `setupRootfs()` or `setupLayeredRootfs()` to set up the root filesystem.
 - Calls `performBindMounts()` to set up bind mounts.
 - Calls `setupCgroups()` to set up control groups.
+- Calls `setupUser()` to switch to the specified user.
 - Sets environment variables.
 
 ## setupLayeredRootfs(config *Config) error
@@ -57,13 +58,17 @@
 - Sets resource limits (process count, memory, CPU).
 - Adds the current process to the cgroups.
 
+## setupUser(user string) error
+
+- Switches to the specified user using the `su` command.
+
 ## cleanup(config *Config) error
 
 - Cleans up cgroups and unmounts filesystems after the container exits.
 
 ## validateConfig(config *Config) error
 
-- Validates the configuration parameters (rootfs path, process limit, memory limit, CPU share, command, mounts, layers).
+- Validates the configuration parameters (rootfs path, process limit, memory limit, CPU share, command, mounts, layers, user).
 
 ## mustAtoi(s string) int
 
