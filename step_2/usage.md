@@ -31,7 +31,7 @@ go build -o container-runtime main.go
 Run the following command to create a new container environment:
 
 ```bash
-go run main.go run <rootfs> <process_limit> <memory_limit> <cpu_share> <env_vars> [--mount source:dest[:ro]] [--layers layer1,layer2] [--user username] -- <cmd> <args>
+go run main.go run <rootfs> <process_limit> <memory_limit> <cpu_share> <env_vars> [--mount source:dest[:ro]] [--layers layer1,layer2] -- <cmd> <args>
 ```
 
 Where:
@@ -42,7 +42,6 @@ Where:
 - `<env_vars>` specifies environment variables (e.g., `KEY=VALUE,FOO=BAR`).
 - `[--mount source:dest[:ro]]` specifies bind mounts (optional).
 - `[--layers layer1,layer2]` specifies OverlayFS layers (optional).
-- `[--user username]` specifies the user to run the command as (optional).
 - `<cmd>` is the program to execute inside the container.
 - `<args>` are the arguments for the command.
 
@@ -58,12 +57,6 @@ To run `bash` inside the container with bind mounts and OverlayFS layers, use:
 
 ```bash
 go run main.go run /home/pj/ubuntufs 100 512m 1024 KEY=VALUE --mount /host/path:/container/path:ro --layers /layer1,/layer2 -- /bin/bash
-```
-
-To run `bash` inside the container as a specific user, use:
-
-```bash
-go run main.go run /home/pj/ubuntufs 100 512m 1024 KEY=VALUE --user myuser -- /bin/bash
 ```
 
 ## Notes
