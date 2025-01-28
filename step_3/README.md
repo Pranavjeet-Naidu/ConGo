@@ -2,7 +2,7 @@
 
 This repository extends the container runtime from step_2 by adding user namespace and privilege dropping capabilities.
 
-## Changes from step_2
+## new changes
 
 1. **User Namespace Support**: Added `CLONE_NEWUSER` flag to completely isolate users inside the container
 2. **UID/GID Mapping**: Added UID and GID mappings to map container root user to unprivileged host user
