@@ -9,6 +9,7 @@ import (
     "strconv"
     "strings"
     "syscall"
+    "golang.org/x/sys/unix"
 )
 
 // Config stores container configuration
@@ -23,7 +24,9 @@ type Config struct {
     UseLayers    bool     
     ImageLayers  []string 
     User         string   // New field for user namespace
+    Capabilities []string // New field for capabilities
 }
+
 
 type Mount struct {
     Source      string
@@ -31,10 +34,40 @@ type Mount struct {
     ReadOnly    bool
 }
 
+func setupCapabilities(config *Config) error {
+    if len(config.Capabilities) == 0 {
+        // Drop all capabilities by default
+        allCaps := []string{
+            "CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FSETID",
+            "CAP_FOWNER", "CAP_MKNOD", "CAP_NET_RAW",
+            "CAP_SETGID", "CAP_SETUID", "CAP_SETFCAP",
+            "CAP_SETPCAP", "CAP_NET_BIND_SERVICE",
+            "CAP_SYS_CHROOT", "CAP_KILL", "CAP_AUDIT_WRITE",
+        }
+        for _, cap := range allCaps {
+            if err := dropCapability(cap); err != nil {
+                return fmt.Errorf("failed to drop capability %s: %v", cap, err)
+            }
+        }
+        return nil
+    }
+
+    // Keep only specified capabilities
+    return nil
+}
+
+func dropCapability(capability string) error {
+    err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0)
+    if err != nil {
+        return fmt.Errorf("failed to clear ambient capabilities: %v", err)
+    }
+    return nil
+}
 func parseConfig(args []string, isChild bool) (*Config, error) {
     config := &Config{
         EnvVars: make(map[string]string),
         Mounts:  make([]Mount, 0),
+        Capabilities: make([]string, 0),
     }
 
     if len(args) < 7 {
@@ -81,6 +114,12 @@ func parseConfig(args []string, isChild bool) (*Config, error) {
             }
             config.User = args[currentIdx+1]
             currentIdx += 2
+        case "--cap-add":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing capability specification")
+            }
+            config.Capabilities = append(config.Capabilities, args[currentIdx+1])
+            currentIdx += 2
         default:
             return nil, fmt.Errorf("unknown option: %s", args[currentIdx])
         }
@@ -107,6 +146,10 @@ func setupContainer(config *Config) error {
         if err := setupRootfs(config.Rootfs); err != nil {
             return fmt.Errorf("error setting up rootfs: %v", err)
         }
+    }
+     // Add capability setup early in the process
+     if err := setupCapabilities(config); err != nil {
+        return fmt.Errorf("error setting up capabilities: %v", err)
     }
 
     // Setup bind mounts

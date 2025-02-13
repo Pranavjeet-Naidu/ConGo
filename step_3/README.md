@@ -39,6 +39,8 @@ This repository extends the container runtime from step_2 by adding user namespa
 
 3. New function `setupUser()` to handle privilege dropping
 
+4. New functions to handle dropping unnecessary linux capabilities
+
 ## Security Notes
 
 - User namespaces provide an additional layer of security

@@ -39,6 +39,8 @@ sudo ./container-runtime run /path/to/rootfs 100 512m 1024 PATH=/usr/bin --user 
 sudo ./container-runtime run /path/to/rootfs 100 512m 1024 PATH=/usr/bin --user nobody --mount /host/path:/container/path:ro -- /bin/sh
 ```
 
+also : droppping capabilities : ./container --cap-add CAP_NET_BIND_SERVICE -- /bin/bash
+
 ## Environment Variables
 
 Default environment variables set:
