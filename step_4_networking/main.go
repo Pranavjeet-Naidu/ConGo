@@ -25,6 +25,12 @@ type NetworkConfig struct {
     PortMaps    []PortMapping
 }
 
+// adding some constants that are not defined in unix package
+const (
+    PR_CAP_PERMITTED  = 2
+    PR_CAP_EFFECTIVE  = 3
+    PR_CAP_INHERITABLE = 1
+)
 // Config stores container configuration
 type Config struct {
     Rootfs       string
@@ -48,42 +54,109 @@ type PortMapping struct {
 }
 
 
+
 func setupCapabilities(config *Config) error {
+    // Map of capability names to their numeric values
+    capMap := map[string]uintptr{
+        "CAP_CHOWN":            0,
+        "CAP_DAC_OVERRIDE":     1,
+        "CAP_DAC_READ_SEARCH":  2,
+        "CAP_FOWNER":           3,
+        "CAP_FSETID":           4,
+        "CAP_KILL":             5,
+        "CAP_SETGID":           6,
+        "CAP_SETUID":           7,
+        "CAP_SETPCAP":          8,
+        "CAP_NET_BIND_SERVICE": 10,
+        "CAP_NET_RAW":          13,
+        "CAP_SYS_CHROOT":       18,
+        "CAP_MKNOD":            27,
+        "CAP_AUDIT_WRITE":      29,
+        "CAP_SETFCAP":          31,
+    }
+
+
     if len(config.Capabilities) == 0 {
         // Drop all capabilities by default
-        allCaps := []string{
-            "CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FSETID",
-            "CAP_FOWNER", "CAP_MKNOD", "CAP_NET_RAW",
-            "CAP_SETGID", "CAP_SETUID", "CAP_SETFCAP",
-            "CAP_SETPCAP", "CAP_NET_BIND_SERVICE",
-            "CAP_SYS_CHROOT", "CAP_KILL", "CAP_AUDIT_WRITE",
-        }
-        for _, cap := range allCaps {
-            if err := dropCapability(cap); err != nil {
-                return fmt.Errorf("failed to drop capability %s: %v", cap, err)
-            }
+        log.Println("Dropping all capabilities")
+        if err := clearAllCapabilities(); err != nil {
+            return fmt.Errorf("failed to clear all capabilities: %v", err)
         }
         return nil
     }
 
     // Keep only specified capabilities
+    log.Printf("Setting up capabilities: %v", config.Capabilities)
+    
+    // First drop all capabilities
+    if err := clearAllCapabilities(); err != nil {
+        return fmt.Errorf("failed to clear all capabilities: %v", err)
+    }
+    
+    // Then add back the ones specified
+    for _, cap := range config.Capabilities {
+        capValue, exists := capMap[cap]
+        if !exists {
+            return fmt.Errorf("unknown capability: %s", cap)
+        }
+        
+        if err := addCapability(capValue); err != nil {
+            return fmt.Errorf("failed to add capability %s: %v", cap, err)
+        }
+        log.Printf("Added capability: %s", cap)
+    }
+    
     return nil
 }
 
-func dropCapability(capability string) error {
-    err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0)
-    if err != nil {
+func clearAllCapabilities() error {
+    // Clear all ambient capabilities
+    if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
         return fmt.Errorf("failed to clear ambient capabilities: %v", err)
     }
+    
+    // Clear bounding set capabilities
+    for i := uintptr(0); i <= 40; i++ { // Loop through all possible capability values
+        unix.Prctl(unix.PR_CAPBSET_DROP, i, 0, 0, 0)
+    }
+    
     return nil
 }
+
+func addCapability(capValue uintptr) error {
+    // Set capability in the permitted set
+    if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_RAISE, capValue, 0, 0); err != nil {
+        return fmt.Errorf("failed to add capability to ambient set: %v", err)
+    }
+    
+    // Set capability in the permitted set using direct value
+    if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
+        return fmt.Errorf("failed to set PR_SET_KEEPCAPS: %v", err)
+    }
+    
+    // Set capability in the permitted set
+    if err := unix.Prctl(PR_CAP_PERMITTED, 1, capValue, 0, 0); err != nil {
+        return fmt.Errorf("failed to add capability to permitted set: %v", err)
+    }
+    
+    // Set capability in the effective set
+    if err := unix.Prctl(PR_CAP_EFFECTIVE, 1, capValue, 0, 0); err != nil {
+        return fmt.Errorf("failed to add capability to effective set: %v", err)
+    }
+    
+    return nil
+}
+
 func parseConfig(args []string, isChild bool) (*Config, error) {
     config := &Config{
         EnvVars: make(map[string]string),
         Mounts:  make([]Mount, 0),
         Capabilities: make([]string, 0),
+        Network: NetworkConfig{
+            Bridge:      "congo0",  // Default bridge name
+            PortMaps:    make([]PortMapping, 0),
+        },
     }
-
     if len(args) < 7 {
         return nil, fmt.Errorf("not enough arguments")
     }
@@ -133,6 +206,28 @@ func parseConfig(args []string, isChild bool) (*Config, error) {
                 return nil, fmt.Errorf("missing capability specification")
             }
             config.Capabilities = append(config.Capabilities, args[currentIdx+1])
+            currentIdx += 2
+        case "--net-bridge":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing bridge name")
+            }
+            config.Network.Bridge = args[currentIdx+1]
+            currentIdx += 2
+        case "--net-ip":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing IP address")
+            }
+            config.Network.ContainerIP = args[currentIdx+1]
+            currentIdx += 2
+        case "--port":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing port mapping")
+            }
+            portMap, err := parsePortMapping(args[currentIdx+1])
+            if err != nil {
+                return nil, fmt.Errorf("invalid port mapping: %v", err)
+            }
+            config.Network.PortMaps = append(config.Network.PortMaps, portMap)
             currentIdx += 2
         default:
             return nil, fmt.Errorf("unknown option: %s", args[currentIdx])
@@ -187,6 +282,12 @@ func setupContainer(config *Config) error {
     for k, v := range config.EnvVars {
         if err := os.Setenv(k, v); err != nil {
             return fmt.Errorf("error setting environment variable %s: %v", k, err)
+        }
+    }
+        // Setup networking if IP is specified
+    if config.Network.ContainerIP != "" {
+        if err := setupNetworking(config); err != nil {
+            return fmt.Errorf("error setting up networking: %v", err)
         }
     }
 
@@ -569,3 +670,42 @@ func mustAtoi(s string) int {
     return i
 }
 
+func parsePortMapping(spec string) (PortMapping, error) {
+    // Format should be "hostPort:containerPort/protocol"
+    // Example: "8080:80/tcp"
+    
+    // First split by "/" to separate protocol
+    parts := strings.Split(spec, "/")
+    if len(parts) != 2 {
+        return PortMapping{}, fmt.Errorf("invalid port mapping format: %s", spec)
+    }
+    
+    portSpec := parts[0]
+    protocol := parts[1]
+    
+    if protocol != "tcp" && protocol != "udp" {
+        return PortMapping{}, fmt.Errorf("invalid protocol (must be tcp or udp): %s", protocol)
+    }
+    
+    // Split port specification by ":"
+    portParts := strings.Split(portSpec, ":")
+    if len(portParts) != 2 {
+        return PortMapping{}, fmt.Errorf("invalid port specification: %s", portSpec)
+    }
+    
+    hostPort, err := strconv.Atoi(portParts[0])
+    if err != nil {
+        return PortMapping{}, fmt.Errorf("invalid host port: %s", portParts[0])
+    }
+    
+    containerPort, err := strconv.Atoi(portParts[1])
+    if err != nil {
+        return PortMapping{}, fmt.Errorf("invalid container port: %s", portParts[1])
+    }
+    
+    return PortMapping{
+        HostPort:      hostPort,
+        ContainerPort: containerPort,
+        Protocol:      protocol,
+    }, nil
+}
