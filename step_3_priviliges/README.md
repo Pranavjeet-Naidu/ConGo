@@ -1,8 +1,8 @@
-# step_3
 
-This repository extends the container runtime from step_2 by adding user namespace and privilege dropping capabilities.
 
-## new changes
+This adds user namespace and privilege dropping capabilities 
+
+## new stuff
 
 1. **User Namespace Support**: Added `CLONE_NEWUSER` flag to completely isolate users inside the container
 2. **UID/GID Mapping**: Added UID and GID mappings to map container root user to unprivileged host user
@@ -48,15 +48,4 @@ This repository extends the container runtime from step_2 by adding user namespa
 - Better isolation between host and container processes
 - Privilege dropping helps minimize potential security risks
 
-## Retained Features from step_2
 
-- Namespace isolation (UTS, PID, Network, Mount, IPC)
-- Cgroups for resource limiting
-- OverlayFS support
-- Bind mounts
-- Environment variable handling
-- Resource limits (CPU, memory, processes)
-
-## Building and Usage
-
-See usage.md for detailed instructions on building and running the container runtime.

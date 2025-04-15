@@ -1,4 +1,3 @@
-# Summary of Functions in main.go
 
 ## main()
 

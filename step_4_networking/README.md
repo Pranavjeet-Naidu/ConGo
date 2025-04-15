@@ -1,6 +1,5 @@
-# Step 4: Network Namespace and Container Networking
 
-This repository extends the container runtime from step 3 by adding comprehensive network isolation and configuration capabilities.
+This step basically adds network isolation and configuration capabilities.
 
 ## New Features
 
@@ -49,14 +48,6 @@ This repository extends the container runtime from step 3 by adding comprehensiv
 - IP address assignment allows containers to communicate
 - Port forwarding allows external access to container services
 
-## Retained Features from Step 3
-
-- User namespace isolation with UID/GID mapping
-- Capability dropping for improved security
-- Cgroups for resource limiting
-- OverlayFS support for layered file systems
-- Bind mounts for accessing host files
-- Environment variable handling
 
 ## Security Considerations
 
@@ -64,6 +55,3 @@ This repository extends the container runtime from step 3 by adding comprehensiv
 - Capability management reduces the attack surface
 - Port mappings allow controlled access to container services
 
-## Building and Usage
-
-See usage.md for detailed instructions on building and running the container runtime with networking features.

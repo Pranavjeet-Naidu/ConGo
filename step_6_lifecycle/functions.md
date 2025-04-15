@@ -1,6 +1,4 @@
-# Congo: Container Lifecycle Management Functions
 
-This document describes the key functions related to the container lifecycle management functionality in step 6 of the Congo container implementation.
 
 ## Container State Management
 

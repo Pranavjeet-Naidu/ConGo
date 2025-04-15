@@ -1,8 +1,6 @@
-# Congo: Container Lifecycle Management Usage Guide
 
-This guide explains how to use the container lifecycle management features in the Congo container implementation.
 
-## Basic Container Lifecycle Commands
+##  Container Lifecycle Commands
 
 ### Creating a Container
 

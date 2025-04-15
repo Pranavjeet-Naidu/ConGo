@@ -1,6 +1,3 @@
-# Congo: Resource Monitoring Functions
-
-This document describes the key functions related to the resource monitoring functionality in step 5 of the Congo container implementation.
 
 ## Configuration Functions
 

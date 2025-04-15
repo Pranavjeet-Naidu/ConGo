@@ -1,5 +1,3 @@
-# Summary of Functions in main.go
-
 ## Network-related Functions
 
 ### setupNetworking(config *Config) error

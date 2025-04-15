@@ -1,6 +1,5 @@
-# step_1
 
-This repository provides a simple container runtime written in Go. It leverages Linux namespaces, cgroups, and chroot to isolate processes.
+provides a simple container runtime written in Go. It leverages Linux namespaces, cgroups, and chroot to isolate processes.
 
 ## New Changes 
 

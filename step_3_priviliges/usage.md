@@ -1,4 +1,3 @@
-# Usage Instructions
 
 ## Prerequisites
 

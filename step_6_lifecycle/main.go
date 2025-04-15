@@ -494,7 +494,7 @@ func setupLogging(config *Config) error {
     return nil
 }
 
-// Add after setupLogging function
+
 
 func startResourceMonitoring(config *Config) error {
     if !config.MonitorConfig.Enabled {
@@ -770,7 +770,7 @@ func cleanup(config *Config) error {
     return nil
 }
 
-// Add this function:
+
 func removeContainer(containerID string) error {
     // Load container state
     state, err := loadContainerState(containerID)
@@ -844,7 +844,7 @@ func setupCgroups(config *Config) error {
                 return fmt.Errorf("failed to set cpu.shares: %v", err)
             }
         case "blkio":
-            // Add blkio settings if needed
+            // for now unnecessary , maybe for later :D
         }
     }
 
@@ -1431,7 +1431,7 @@ func commitContainer(containerID, imageName string) error {
     return nil
 }
 
-// Add these functions:
+
 func pauseContainer(containerID string) error {
     // Load container state
     state, err := loadContainerState(containerID)
@@ -1793,10 +1793,8 @@ func cleanupPortForwarding(containerID string) error {
         return fmt.Errorf("failed to load container state for port cleanup: %v", err)
     }
     
-    // We need to store network configuration in the container state
-    // Let's add this information to the ContainerState struct and use it here
     
-    // Check if we have network configuration in the state
+    // Check for network configuration in the state
     if state.Network.ContainerIP == "" || len(state.Network.PortMaps) == 0 {
         // No port mappings to clean up
         return nil

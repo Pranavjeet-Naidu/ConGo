@@ -1,6 +1,5 @@
-# step_2
 
-This repository provides a simple container runtime written in Go. It leverages Linux namespaces, cgroups, and chroot to isolate processes. Below is an overview of how to use and understand the code.
+This provides a simple container runtime written in Go. It leverages Linux namespaces, cgroups, and chroot to isolate processes. 
 
 ## Overview
 
@@ -66,7 +65,3 @@ sudo tar -xzf alpine-minirootfs-latest-x86_64.tar.gz -C /home/liz/ubuntufs
 - **Security:** This is a simplified demonstration and may not handle all security concerns of a production container runtime.
 - **Privileges:** Running this code requires root privileges because it sets up namespaces and cgroups.
 
-## Troubleshooting
-
-- Check logs for messages prefixed with `container-runtime:` if something fails.
-- Ensure your kernel supports required namespaces and cgroup controllers.

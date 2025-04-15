@@ -1,6 +1,3 @@
-# Congo: Resource Monitoring Usage Guide
-
-This guide explains how to use the resource monitoring features in the Congo container implementation.
 
 ## Monitoring Command-Line Options
 
