@@ -11,7 +11,23 @@ import (
     "syscall"
     "golang.org/x/sys/unix"
     "net"
+    "time"
 )
+
+type LoggingConfig struct {
+    LogDir        string // Directory to store logs
+    EnableLogging bool   // Whether to enable logging
+    MaxLogSize    int64  // Maximum log size before rotation (bytes)
+}
+
+type MonitoringConfig struct {
+    Enabled          bool   // Whether to enable monitoring
+    Interval         int    // Monitoring interval in seconds
+    StatsFile        string // File to write stats to
+    MonitorCpu       bool   // Whether to monitor CPU usage
+    MonitorMemory    bool   // Whether to monitor memory usage
+    MonitorProcesses bool   // Whether to monitor process count
+}
 
 type Mount struct {
     Source      string
@@ -42,9 +58,11 @@ type Config struct {
     Mounts       []Mount
     UseLayers    bool     
     ImageLayers  []string 
-    User         string   // New field for user namespace
-    Capabilities []string // New field for capabilities
+    User         string   
+    Capabilities []string 
 	Network NetworkConfig
+	LogConfig LoggingConfig
+    MonitorConfig MonitoringConfig
 }
 
 type PortMapping struct {
@@ -152,6 +170,21 @@ func parseConfig(args []string, isChild bool) (*Config, error) {
         EnvVars: make(map[string]string),
         Mounts:  make([]Mount, 0),
         Capabilities: make([]string, 0),
+        Network: NetworkConfig{
+            Bridge:      "congo0",  // Default bridge name
+            PortMaps:    make([]PortMapping, 0),
+        },
+        LogConfig: LoggingConfig{
+            EnableLogging: false,
+            MaxLogSize:    10 * 1024 * 1024, // Default 10 MB
+        },
+        MonitorConfig: MonitoringConfig{
+            Enabled:          false,
+            Interval:         30,  // Default 30 seconds
+            MonitorCpu:       true,
+            MonitorMemory:    true,
+            MonitorProcesses: true,
+        },
     }
 
     if len(args) < 7 {
@@ -204,6 +237,52 @@ func parseConfig(args []string, isChild bool) (*Config, error) {
             }
             config.Capabilities = append(config.Capabilities, args[currentIdx+1])
             currentIdx += 2
+        case "--log-dir":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing log directory")
+            }
+            config.LogConfig.LogDir = args[currentIdx+1]
+            config.LogConfig.EnableLogging = true
+            currentIdx += 2
+        case "--log-max-size":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing maximum log size")
+            }
+            maxSize, err := strconv.ParseInt(args[currentIdx+1], 10, 64)
+            if err != nil {
+                return nil, fmt.Errorf("invalid log max size: %v", err)
+            }
+            config.LogConfig.MaxLogSize = maxSize
+            currentIdx += 2
+        case "--enable-monitor":
+            config.MonitorConfig.Enabled = true
+            currentIdx++
+        case "--monitor-interval":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing monitoring interval")
+            }
+            interval, err := strconv.Atoi(args[currentIdx+1])
+            if err != nil {
+                return nil, fmt.Errorf("invalid monitoring interval: %v", err)
+            }
+            config.MonitorConfig.Interval = interval
+            currentIdx += 2
+        case "--monitor-stats-file":
+            if currentIdx+1 >= cmdIndex {
+                return nil, fmt.Errorf("missing stats file path")
+            }
+            config.MonitorConfig.StatsFile = args[currentIdx+1]
+            currentIdx += 2  
+        case "--monitor-cpu":
+            config.MonitorConfig.MonitorCpu = true
+            currentIdx++
+        case "--monitor-memory":
+            config.MonitorConfig.MonitorMemory = true
+            currentIdx++
+        case "--monitor-processes":
+            config.MonitorConfig.MonitorProcesses = true
+            currentIdx++
+        
         default:
             return nil, fmt.Errorf("unknown option: %s", args[currentIdx])
         }
@@ -260,6 +339,20 @@ func setupContainer(config *Config) error {
         }
     }
 
+    // Setup logging if enabled
+    if config.LogConfig.EnableLogging {
+        if err := setupLogging(config); err != nil {
+            return fmt.Errorf("error setting up logging: %v", err)
+        }
+    }
+    
+    // Start resource monitoring if enabled
+    if config.MonitorConfig.Enabled {
+        if err := startResourceMonitoring(config); err != nil {
+            return fmt.Errorf("error starting resource monitoring: %v", err)
+        }
+    }
+
     return nil
 }
 
@@ -277,7 +370,7 @@ func setupUser(user string) error {
     return nil
 }
 
-// Add these new functions
+
 
 func setupNetworking(config *Config) error {
     // Create bridge if it doesn't exist
@@ -309,6 +402,196 @@ func setupNetworking(config *Config) error {
     }
 
     return nil
+}
+
+
+func setupLogging(config *Config) error {
+    if !config.LogConfig.EnableLogging {
+        return nil
+    }
+    
+    // Create log directory if it doesn't exist
+    if err := os.MkdirAll(config.LogConfig.LogDir, 0755); err != nil {
+        return fmt.Errorf("failed to create log directory: %v", err)
+    }
+    
+    // Create stdout log file
+    stdoutPath := filepath.Join(config.LogConfig.LogDir, fmt.Sprintf("container-%d-stdout.log", os.Getpid()))
+    stdoutFile, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    if err != nil {
+        return fmt.Errorf("failed to open stdout log file: %v", err)
+    }
+    
+    // Create stderr log file
+    stderrPath := filepath.Join(config.LogConfig.LogDir, fmt.Sprintf("container-%d-stderr.log", os.Getpid()))
+    stderrFile, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    if err != nil {
+        stdoutFile.Close()
+        return fmt.Errorf("failed to open stderr log file: %v", err)
+    }
+    
+    // Redirect standard output
+    if err := syscall.Dup2(int(stdoutFile.Fd()), int(os.Stdout.Fd())); err != nil {
+        stdoutFile.Close()
+        stderrFile.Close()
+        return fmt.Errorf("failed to redirect stdout: %v", err)
+    }
+    
+    // Redirect standard error
+    if err := syscall.Dup2(int(stderrFile.Fd()), int(os.Stderr.Fd())); err != nil {
+        stdoutFile.Close()
+        stderrFile.Close()
+        return fmt.Errorf("failed to redirect stderr: %v", err)
+    }
+    
+    // Log that logging has been set up successfully
+    fmt.Printf("Logging initialized: stdout -> %s, stderr -> %s\n", stdoutPath, stderrPath)
+    
+    return nil
+}
+
+// Add after setupLogging function
+
+func startResourceMonitoring(config *Config) error {
+    if !config.MonitorConfig.Enabled {
+        return nil
+    }
+    
+    // Set default interval if not specified
+    if config.MonitorConfig.Interval <= 0 {
+        config.MonitorConfig.Interval = 30 // Default to 30 seconds
+    }
+    
+    // Set default stats file if not specified
+    if config.MonitorConfig.StatsFile == "" {
+        if config.LogConfig.EnableLogging {
+            config.MonitorConfig.StatsFile = filepath.Join(config.LogConfig.LogDir, 
+                fmt.Sprintf("container-%d-stats.log", os.Getpid()))
+        } else {
+            return fmt.Errorf("stats file must be specified when logging is disabled")
+        }
+    }
+    
+    // Enable all metrics by default if none specified
+    if !config.MonitorConfig.MonitorCpu && 
+       !config.MonitorConfig.MonitorMemory && 
+       !config.MonitorConfig.MonitorProcesses {
+        config.MonitorConfig.MonitorCpu = true
+        config.MonitorConfig.MonitorMemory = true
+        config.MonitorConfig.MonitorProcesses = true
+    }
+    
+    // Create stats file
+    statsFile, err := os.OpenFile(
+        config.MonitorConfig.StatsFile,
+        os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+        0644,
+    )
+    if err != nil {
+        return fmt.Errorf("failed to open stats file: %v", err)
+    }
+    
+    // Start monitoring in a separate goroutine
+    go func() {
+        ticker := time.NewTicker(time.Duration(config.MonitorConfig.Interval) * time.Second)
+        defer ticker.Stop()
+        defer statsFile.Close()
+        
+        fmt.Fprintf(statsFile, "=== Resource monitoring started at %s ===\n", 
+            time.Now().Format(time.RFC3339))
+            
+        for {
+            select {
+            case <-ticker.C:
+                stats, err := collectResourceStats(config)
+                if err != nil {
+                    fmt.Fprintf(statsFile, "Error collecting stats: %v\n", err)
+                    continue
+                }
+                
+                // Write stats to file
+                timestamp := time.Now().Format(time.RFC3339)
+                fmt.Fprintf(statsFile, "[%s] %s\n", timestamp, stats)
+            }
+        }
+    }()
+    
+    fmt.Printf("Resource monitoring started: stats file -> %s, interval -> %ds\n", 
+        config.MonitorConfig.StatsFile, config.MonitorConfig.Interval)
+    
+    return nil
+}
+
+func collectResourceStats(config *Config) (string, error) {
+    containerID := fmt.Sprintf("container-%d", os.Getpid())
+    var stats strings.Builder
+    
+    // Collect CPU stats
+    if config.MonitorConfig.MonitorCpu {
+        // For cgroup v2
+        cpuStatPath := filepath.Join("/sys/fs/cgroup/cpu.stat")
+        if _, err := os.Stat(cpuStatPath); err == nil {
+            cpuData, err := os.ReadFile(cpuStatPath)
+            if err == nil {
+                stats.WriteString("CPU: ")
+                stats.WriteString(strings.Replace(string(cpuData), "\n", " ", -1))
+                stats.WriteString(" | ")
+            }
+        } else {
+            // Fallback to cgroup v1
+            cpuStatPath := filepath.Join("/sys/fs/cgroup/cpu", containerID, "cpu.stat")
+            cpuData, err := os.ReadFile(cpuStatPath)
+            if err == nil {
+                stats.WriteString("CPU: ")
+                stats.WriteString(strings.Replace(string(cpuData), "\n", " ", -1))
+                stats.WriteString(" | ")
+            }
+        }
+    }
+    
+    // Collect memory stats
+    if config.MonitorConfig.MonitorMemory {
+        // For cgroup v2
+        memStatPath := filepath.Join("/sys/fs/cgroup/memory.current")
+        if _, err := os.Stat(memStatPath); err == nil {
+            memData, err := os.ReadFile(memStatPath)
+            if err == nil {
+                memBytes, _ := strconv.ParseInt(strings.TrimSpace(string(memData)), 10, 64)
+                memMB := float64(memBytes) / 1024 / 1024
+                stats.WriteString(fmt.Sprintf("Memory: %.2f MB | ", memMB))
+            }
+        } else {
+            // Fallback to cgroup v1
+            memStatPath := filepath.Join("/sys/fs/cgroup/memory", containerID, "memory.usage_in_bytes")
+            memData, err := os.ReadFile(memStatPath)
+            if err == nil {
+                memBytes, _ := strconv.ParseInt(strings.TrimSpace(string(memData)), 10, 64)
+                memMB := float64(memBytes) / 1024 / 1024
+                stats.WriteString(fmt.Sprintf("Memory: %.2f MB | ", memMB))
+            }
+        }
+    }
+    
+    // Collect process count
+    if config.MonitorConfig.MonitorProcesses {
+        // For cgroup v2
+        pidsStatPath := filepath.Join("/sys/fs/cgroup/pids.current")
+        if _, err := os.Stat(pidsStatPath); err == nil {
+            pidsData, err := os.ReadFile(pidsStatPath)
+            if err == nil {
+                stats.WriteString(fmt.Sprintf("Processes: %s", strings.TrimSpace(string(pidsData))))
+            }
+        } else {
+            // Fallback to cgroup v1
+            pidsStatPath := filepath.Join("/sys/fs/cgroup/pids", containerID, "pids.current")
+            pidsData, err := os.ReadFile(pidsStatPath)
+            if err == nil {
+                stats.WriteString(fmt.Sprintf("Processes: %s", strings.TrimSpace(string(pidsData))))
+            }
+        }
+    }
+    
+    return stats.String(), nil
 }
 
 func createBridge(name string) error {
