@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -9,11 +10,57 @@ import (
     "strconv"
     "strings"
     "syscall"
-    "golang.org/x/sys/unix"
+    "unsafe"
+    // "golang.org/x/sys/unix"
     "net"
     "time"
 	"encoding/json"
 )
+
+// Linux capability constants and types (missing from unix package on some platforms)
+const (
+    // prctl() commands
+    PR_SET_KEEPCAPS         = 8
+    PR_CAPBSET_DROP         = 24
+    PR_CAP_AMBIENT          = 47
+    PR_CAP_AMBIENT_RAISE    = 2
+    PR_CAP_AMBIENT_LOWER    = 3
+    PR_CAP_AMBIENT_CLEAR_ALL = 4
+    
+    // Linux capability version
+    LINUX_CAPABILITY_VERSION_3 = 0x20080522
+)
+
+// CapUserHeader represents the capability user header
+type CapUserHeader struct {
+    Version uint32
+    Pid     int32
+}
+
+// CapUserData represents capability user data
+type CapUserData struct {
+    Effective   uint32
+    Permitted   uint32
+    Inheritable uint32
+}
+
+// capget syscall wrapper
+func capget(header *CapUserHeader, data *CapUserData) error {
+    _, _, errno := syscall.Syscall(syscall.SYS_CAPGET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
+    if errno != 0 {
+        return errno
+    }
+    return nil
+}
+
+// capset syscall wrapper
+func capset(header *CapUserHeader, data *CapUserData) error {
+    _, _, errno := syscall.Syscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
+    if errno != 0 {
+        return errno
+    }
+    return nil
+}
 
 type LoggingConfig struct {
     LogDir        string // Directory to store logs
@@ -42,12 +89,6 @@ type NetworkConfig struct {
     PortMaps    []PortMapping
 }
 
-// adding some constants that are not defined in unix package
-const (
-    PR_CAP_PERMITTED  = 2
-    PR_CAP_EFFECTIVE  = 3
-    PR_CAP_INHERITABLE = 1
-)
 // Config stores container configuration
 type Config struct {
     Rootfs       string
@@ -156,42 +197,95 @@ func setupCapabilities(config *Config) error {
 }
 
 func clearAllCapabilities() error {
-    // Clear all ambient capabilities
-    if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
-        return fmt.Errorf("failed to clear ambient capabilities: %v", err)
+    // Clear all ambient capabilities using direct prctl syscall
+    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0, 0); errno != 0 {
+        return fmt.Errorf("failed to clear ambient capabilities: %v", errno)
     }
     
     // Clear bounding set capabilities
     for i := uintptr(0); i <= 40; i++ { // Loop through all possible capability values
-        unix.Prctl(unix.PR_CAPBSET_DROP, i, 0, 0, 0)
+        syscall.Syscall6(syscall.SYS_PRCTL, PR_CAPBSET_DROP, i, 0, 0, 0, 0)
     }
     
     return nil
 }
 
 func addCapability(capValue uintptr) error {
-    // Set capability in the permitted set
-    if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_RAISE, capValue, 0, 0); err != nil {
-        return fmt.Errorf("failed to add capability to ambient set: %v", err)
-    }
-    
-    // Set capability in the permitted set using direct value
-    if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
-        return fmt.Errorf("failed to set PR_SET_KEEPCAPS: %v", err)
-    }
-    
-    // non existent prctl constants 
-    // Set capability in the permitted set
-    if err := unix.Prctl(PR_CAP_PERMITTED, 1, capValue, 0, 0); err != nil {
-        return fmt.Errorf("failed to add capability to permitted set: %v", err)
+    // Keep capabilities across setuid operations
+    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, PR_SET_KEEPCAPS, 1, 0, 0, 0, 0); errno != 0 {
+        return fmt.Errorf("failed to set PR_SET_KEEPCAPS: %v", errno)
     }
 
-    // non existent constant 
-    // Set capability in the effective set
-    if err := unix.Prctl(PR_CAP_EFFECTIVE, 1, capValue, 0, 0); err != nil {
-        return fmt.Errorf("failed to add capability to effective set: %v", err)
+    // Get current capabilities
+    header := CapUserHeader{
+        Version: LINUX_CAPABILITY_VERSION_3,
+        Pid:     0, // 0 means current process
     }
-    
+    var data [2]CapUserData
+    if err := capget(&header, &data[0]); err != nil {
+        return fmt.Errorf("failed to get current capabilities: %v", err)
+    }
+
+    // Calculate which data element and bit to set
+    capIndex := capValue / 32
+    capBit := uint32(1) << (capValue % 32)
+    if capIndex >= 2 {
+        return fmt.Errorf("capability value too large: %d", capValue)
+    }
+
+    // Set the capability in effective, permitted, and inheritable sets
+    data[capIndex].Effective |= capBit
+    data[capIndex].Permitted |= capBit
+    data[capIndex].Inheritable |= capBit
+
+    // Apply the new capabilities
+    if err := capset(&header, &data[0]); err != nil {
+        return fmt.Errorf("failed to set capabilities: %v", err)
+    }
+
+    // Set capability in the ambient set (inherited by child processes)
+    // Note: This must be done AFTER setting the capability in inheritable set
+    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, capValue, 0, 0, 0); errno != 0 {
+        return fmt.Errorf("failed to add capability to ambient set: %v", errno)
+    }
+
+    return nil
+}
+
+// Helper function to remove a capability
+func removeCapability(capValue uintptr) error {
+    // Get current capabilities
+    header := CapUserHeader{
+        Version: LINUX_CAPABILITY_VERSION_3,
+        Pid:     0,
+    }
+    var data [2]CapUserData
+    if err := capget(&header, &data[0]); err != nil {
+        return fmt.Errorf("failed to get current capabilities: %v", err)
+    }
+
+    // Calculate which data element and bit to clear
+    capIndex := capValue / 32
+    capBit := uint32(1) << (capValue % 32)
+    if capIndex >= 2 {
+        return fmt.Errorf("capability value too large: %d", capValue)
+    }
+
+    // Clear the capability from all sets
+    data[capIndex].Effective &^= capBit
+    data[capIndex].Permitted &^= capBit
+    data[capIndex].Inheritable &^= capBit
+
+    // Apply the changes
+    if err := capset(&header, &data[0]); err != nil {
+        return fmt.Errorf("failed to set capabilities: %v", err)
+    }
+
+    // Remove from ambient set
+    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, PR_CAP_AMBIENT, PR_CAP_AMBIENT_LOWER, capValue, 0, 0, 0); errno != 0 {
+        return fmt.Errorf("failed to remove capability from ambient set: %v", errno)
+    }
+
     return nil
 }
 
