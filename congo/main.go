@@ -1,15 +1,11 @@
-// since we use linux specific syscalls , we need to use cross-compile to a linux binary 
-// use : GOOS=linux GOARCH=amd64 go build
-// +build linux
+
 package main
 
 import (
-    "context"
     "fmt"
     "log"
     "os"
     "os/exec"
-    "os/user"
     "path/filepath"
     "strconv"
     "strings"
@@ -33,30 +29,24 @@ const (
     
     // Linux capability version
     LINUX_CAPABILITY_VERSION_3 = 0x20080522
-    
-    // Linux syscall numbers (x86_64)
-    SYS_CAPGET = 125
-    SYS_CAPSET = 126
-    SYS_PRCTL  = 157
 )
 
-
+// CapUserHeader represents the capability user header
 type CapUserHeader struct {
     Version uint32
     Pid     int32
 }
 
-
+// CapUserData represents capability user data
 type CapUserData struct {
     Effective   uint32
     Permitted   uint32
     Inheritable uint32
 }
 
-// wrapper functions to interact with Linux capabilities
 // capget syscall wrapper
 func capget(header *CapUserHeader, data *CapUserData) error {
-    _, _, errno := syscall.Syscall(SYS_CAPGET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
+    _, _, errno := syscall.Syscall(syscall.SYS_CAPGET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
     if errno != 0 {
         return errno
     }
@@ -65,7 +55,7 @@ func capget(header *CapUserHeader, data *CapUserData) error {
 
 // capset syscall wrapper
 func capset(header *CapUserHeader, data *CapUserData) error {
-    _, _, errno := syscall.Syscall(SYS_CAPSET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
+    _, _, errno := syscall.Syscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
     if errno != 0 {
         return errno
     }
@@ -73,22 +63,18 @@ func capset(header *CapUserHeader, data *CapUserData) error {
 }
 
 type LoggingConfig struct {
-    LogDir        string // Directory to store logs
-    LogDir        string // Directory to store logs
-    LogDir        string // Directory to store logs
-    EnableLogging bool   // Whether to enable logging
-   // MaxLogSize    int64  
-   // max log size before rotation 
-   // log rotation is not implemented yet
+    LogDir        string 
+    EnableLogging bool   
+    MaxLogSize    int64  // Maximum log size before rotation (bytes)
 }
 
 type MonitoringConfig struct {
-    Enabled          bool   // Whether to enable monitoring
-    Interval         int    // Monitoring interval in seconds
-    StatsFile        string // File to write stats to
-    MonitorCpu       bool   // Whether to monitor CPU usage
-    MonitorMemory    bool   // Whether to monitor memory usage
-    MonitorProcesses bool   // Whether to monitor process count
+    Enabled          bool   
+    Interval         int    
+    StatsFile        string 
+    MonitorCpu       bool   
+    MonitorMemory    bool   
+    MonitorProcesses bool   
 }
 
 type Mount struct {
@@ -122,7 +108,7 @@ type Config struct {
 	ContainerID  string         // Unique ID for the container
     State        ContainerState // Current state of the container
     Interactive  bool           // Whether to run in interactive mode
-    Detached     bool           // Whether to run in detached mode
+    Detached     bool           
     StateDir     string         // Directory to store container state
 }
 
@@ -212,13 +198,13 @@ func setupCapabilities(config *Config) error {
 
 func clearAllCapabilities() error {
     // Clear all ambient capabilities using direct prctl syscall
-    if _, _, errno := syscall.Syscall6(SYS_PRCTL, PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0, 0); errno != 0 {
+    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, PR_CAP_AMBIENT, PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0, 0); errno != 0 {
         return fmt.Errorf("failed to clear ambient capabilities: %v", errno)
     }
     
     // Clear bounding set capabilities
     for i := uintptr(0); i <= 40; i++ { // Loop through all possible capability values
-        syscall.Syscall6(SYS_PRCTL, PR_CAPBSET_DROP, i, 0, 0, 0, 0)
+        syscall.Syscall6(syscall.SYS_PRCTL, PR_CAPBSET_DROP, i, 0, 0, 0, 0)
     }
     
     return nil
@@ -479,14 +465,14 @@ func setupContainer(config *Config) error {
             return fmt.Errorf("error setting up cgroups: %v", err)
     }
 
-    // Setup user (must be done before setting environment variables)
+    // Setup user (new functionality)
     if config.User != "" {
         if err := setupUser(config.User); err != nil {
             return fmt.Errorf("error setting up user: %v", err)
         }
     }
 
-    // Setup environment variables (after user setup to avoid conflicts)
+    // Setup environment variables
     for k, v := range config.EnvVars {
         if err := os.Setenv(k, v); err != nil {
             return fmt.Errorf("error setting environment variable %s: %v", k, err)
@@ -511,216 +497,20 @@ func setupContainer(config *Config) error {
 }
 
 func setupUser(user string) error {
-    return setupUserWithContext(context.Background(), user)
-}
+    // Drop privileges to the specified user
+    cmd := exec.Command("su", "-", user)
+    cmd.Stdin = os.Stdin
+    cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
 
-func setupUserWithContext(ctx context.Context, user string) error {
-    // Check for context cancellation
-    select {
-    case <-ctx.Done():
-        return ctx.Err()
-    default:
+    if err := cmd.Run(); err != nil {
+        return fmt.Errorf("failed to switch user: %v", err)
     }
 
-    // Parse user specification (can be username, uid, or uid:gid)
-    var uid, gid int
-    var err error
-    var username string
-    
-    // If user is empty, no user switching is needed
-    if user == "" {
-        return nil
-    }
-    
-    // Input validation and parsing
-    if strings.Contains(user, ":") {
-        // Format: uid:gid
-        parts := strings.Split(user, ":")
-        if len(parts) != 2 {
-            return fmt.Errorf("invalid user format, expected uid:gid")
-        }
-        
-        uid, err = strconv.Atoi(parts[0])
-        if err != nil {
-            return fmt.Errorf("invalid uid: %v", err)
-        }
-        
-        gid, err = strconv.Atoi(parts[1])
-        if err != nil {
-            return fmt.Errorf("invalid gid: %v", err)
-        }
-        
-        username = parts[0] // Use uid as username for environment
-    } else {
-        // Check if it's a numeric uid
-        if uid, err = strconv.Atoi(user); err == nil {
-            // Use same value for gid as uid (common container practice)
-            gid = uid
-            username = user
-        } else {
-            // Try to look up username using standard library
-            uid, gid, err = lookupUserImproved(user)
-            if err != nil {
-                return fmt.Errorf("failed to lookup user %s: %v", user, err)
-            }
-            username = user
-        }
-    }
-    
-    // Bounds checking for uid/gid
-    if uid < 0 || uid > 65535 || gid < 0 || gid > 65535 {
-        return fmt.Errorf("uid/gid out of valid range (0-65535): uid=%d, gid=%d", uid, gid)
-    }
-    
-    // Security check: validate user permissions
-    if err := validateUserPermissions(uid, gid); err != nil {
-        return err
-    }
-    
-    log.Printf("Switching to user: uid=%d, gid=%d", uid, gid)
-    
-    // Get supplementary groups for the user
-    groups, err := getUserGroups(username, gid)
-    if err != nil {
-        log.Printf("Warning: failed to get supplementary groups: %v", err)
-        groups = []int{gid} // Fallback to primary group only
-    }
-    
-    // Set supplementary groups for better security
-    if err := syscall.Setgroups(groups); err != nil {
-        return fmt.Errorf("failed to set supplementary groups: %v", err)
-    }
-    
-    // Set group ID first (must be done before setting user ID)
-    if err := syscall.Setgid(gid); err != nil {
-        return fmt.Errorf("failed to set gid %d: %v", gid, err)
-    }
-    
-    // Set user ID
-    if err := syscall.Setuid(uid); err != nil {
-        return fmt.Errorf("failed to set uid %d: %v", uid, err)
-    }
-    
-    // Update environment variables to reflect the user change
-    if err := os.Setenv("USER", username); err != nil {
-        log.Printf("Warning: failed to set USER environment variable: %v", err)
-    }
-    
-    // Set HOME directory using actual home directory from user lookup when available
-    homeDir := getHomeDirectory(uid, username)
-    if err := os.Setenv("HOME", homeDir); err != nil {
-        log.Printf("Warning: failed to set HOME environment variable: %v", err)
-    }
-    
-    log.Printf("User switch completed: USER=%s, HOME=%s", username, homeDir)
-    
     return nil
 }
 
-// lookupUserImproved uses the standard library for better user lookup
-func lookupUserImproved(username string) (int, int, error) {
-    u, err := user.Lookup(username)
-    if err != nil {
-        // Fallback to manual parsing if standard library fails
-        log.Printf("Standard user lookup failed, falling back to manual parsing: %v", err)
-        return lookupUserFallback(username)
-    }
-    
-    uid, err := strconv.Atoi(u.Uid)
-    if err != nil {
-        return 0, 0, fmt.Errorf("invalid uid in user entry: %v", err)
-    }
-    
-    gid, err := strconv.Atoi(u.Gid)
-    if err != nil {
-        return 0, 0, fmt.Errorf("invalid gid in user entry: %v", err)
-    }
-    
-    return uid, gid, nil
-}
 
-// getHomeDirectory determines the appropriate home directory
-func getHomeDirectory(uid int, username string) string {
-    // Default for root
-    if uid == 0 {
-        return "/root"
-    }
-    
-    // Try to get actual home directory from user lookup
-    if u, err := user.LookupId(strconv.Itoa(uid)); err == nil && u.HomeDir != "" {
-        return u.HomeDir
-    }
-    
-    // Fallback to conventional path
-    return fmt.Sprintf("/home/%s", username)
-}
-
-// lookupUserFallback provides manual /etc/passwd parsing as fallback
-func lookupUserFallback(username string) (int, int, error) {
-    passwdFile := "/etc/passwd"
-    
-    // Check if passwd file exists
-    if _, err := os.Stat(passwdFile); os.IsNotExist(err) {
-        return 0, 0, fmt.Errorf("user lookup not available (no /etc/passwd)")
-    }
-    
-    // Read and parse /etc/passwd
-    content, err := os.ReadFile(passwdFile)
-    if err != nil {
-        return 0, 0, fmt.Errorf("failed to read /etc/passwd: %v", err)
-    }
-    
-    lines := strings.Split(string(content), "\n")
-    for _, line := range lines {
-        if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
-            continue
-        }
-        
-        fields := strings.Split(line, ":")
-        if len(fields) >= 4 && fields[0] == username {
-            uid, err := strconv.Atoi(fields[2])
-            if err != nil {
-                return 0, 0, fmt.Errorf("invalid uid in passwd entry: %v", err)
-            }
-            
-            gid, err := strconv.Atoi(fields[3])
-            if err != nil {
-                return 0, 0, fmt.Errorf("invalid gid in passwd entry: %v", err)
-            }
-            
-            return uid, gid, nil
-        }
-    }
-    
-    return 0, 0, fmt.Errorf("user %s not found", username)
-}
-
-// validateUserPermissions checks if the current process has permission to switch to the target user
-func validateUserPermissions(targetUID, targetGID int) error {
-    currentUID := os.Getuid()
-    currentGID := os.Getgid()
-    
-    // Root can switch to any user
-    if currentUID == 0 {
-        return nil
-    }
-    
-    // Non-root can only switch to same user/group
-    if targetUID != currentUID || targetGID != currentGID {
-        return fmt.Errorf("insufficient privileges: current user %d:%d cannot switch to %d:%d", 
-            currentUID, currentGID, targetUID, targetGID)
-    }
-    
-    return nil
-}
-
-// getUserGroups gets supplementary groups for a user
-func getUserGroups(username string, gid int) ([]int, error) {
-    // For now, return just the primary group
-    // In a more complete implementation, this would parse /etc/group
-    // or use a more sophisticated user lookup
-    return []int{gid}, nil
-}
 
 func setupNetworking(config *Config) error {
     // Create bridge if it doesn't exist
@@ -1110,34 +900,9 @@ func validateConfig(config *Config) error {
         return fmt.Errorf("config cannot be nil")
     }
 
-    // Validate user specification format if provided
     if config.User != "" {
-        // Check for valid uid:gid format if contains colon
-        if strings.Contains(config.User, ":") {
-            parts := strings.Split(config.User, ":")
-            if len(parts) != 2 {
-                return fmt.Errorf("invalid user format: %s (expected uid:gid)", config.User)
-            }
-            // Validate that both parts are numeric
-            if _, err := strconv.Atoi(parts[0]); err != nil {
-                return fmt.Errorf("invalid uid in user specification: %s", parts[0])
-            }
-            if _, err := strconv.Atoi(parts[1]); err != nil {
-                return fmt.Errorf("invalid gid in user specification: %s", parts[1])
-            }
-        }
-    }
-
-    // Validate resource limits format
-    if config.MemoryLimit != "" {
-        // Basic validation for memory limit format (should be numeric + suffix)
-        if !strings.HasSuffix(config.MemoryLimit, "M") && 
-           !strings.HasSuffix(config.MemoryLimit, "G") && 
-           !strings.HasSuffix(config.MemoryLimit, "K") {
-            // Allow plain numeric values too
-            if _, err := strconv.Atoi(config.MemoryLimit); err != nil {
-                return fmt.Errorf("invalid memory limit format: %s", config.MemoryLimit)
-            }
+        if _, err := exec.LookPath("su"); err != nil {
+            return fmt.Errorf("su command not found, required for user switching")
         }
     }
 
