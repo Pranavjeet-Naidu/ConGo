@@ -63,18 +63,18 @@ func capset(header *CapUserHeader, data *CapUserData) error {
 }
 
 type LoggingConfig struct {
-    LogDir        string // Directory to store logs
-    EnableLogging bool   // Whether to enable logging
+    LogDir        string 
+    EnableLogging bool   
     MaxLogSize    int64  // Maximum log size before rotation (bytes)
 }
 
 type MonitoringConfig struct {
-    Enabled          bool   // Whether to enable monitoring
-    Interval         int    // Monitoring interval in seconds
-    StatsFile        string // File to write stats to
-    MonitorCpu       bool   // Whether to monitor CPU usage
-    MonitorMemory    bool   // Whether to monitor memory usage
-    MonitorProcesses bool   // Whether to monitor process count
+    Enabled          bool   
+    Interval         int    
+    StatsFile        string 
+    MonitorCpu       bool   
+    MonitorMemory    bool   
+    MonitorProcesses bool   
 }
 
 type Mount struct {
@@ -108,7 +108,7 @@ type Config struct {
 	ContainerID  string         // Unique ID for the container
     State        ContainerState // Current state of the container
     Interactive  bool           // Whether to run in interactive mode
-    Detached     bool           // Whether to run in detached mode
+    Detached     bool           
     StateDir     string         // Directory to store container state
 }
 
