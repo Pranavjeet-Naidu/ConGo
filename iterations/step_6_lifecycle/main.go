@@ -180,11 +180,13 @@ func addCapability(capValue uintptr) error {
         return fmt.Errorf("failed to set PR_SET_KEEPCAPS: %v", err)
     }
     
+    // non existent prctl constants 
     // Set capability in the permitted set
     if err := unix.Prctl(PR_CAP_PERMITTED, 1, capValue, 0, 0); err != nil {
         return fmt.Errorf("failed to add capability to permitted set: %v", err)
     }
-    
+
+    // non existent constant 
     // Set capability in the effective set
     if err := unix.Prctl(PR_CAP_EFFECTIVE, 1, capValue, 0, 0); err != nil {
         return fmt.Errorf("failed to add capability to effective set: %v", err)
