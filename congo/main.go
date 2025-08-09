@@ -2,10 +2,12 @@
 package main
 
 import (
+    "context"
     "fmt"
     "log"
     "os"
     "os/exec"
+    "os/user"
     "path/filepath"
     "strconv"
     "strings"
@@ -497,17 +499,215 @@ func setupContainer(config *Config) error {
 }
 
 func setupUser(user string) error {
-    // Drop privileges to the specified user
-    cmd := exec.Command("su", "-", user)
-    cmd.Stdin = os.Stdin
-    cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
+    return setupUserWithContext(context.Background(), user)
+}
 
-    if err := cmd.Run(); err != nil {
-        return fmt.Errorf("failed to switch user: %v", err)
+func setupUserWithContext(ctx context.Context, user string) error {
+    // Check for context cancellation
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    default:
     }
 
+    // Parse user specification (can be username, uid, or uid:gid)
+    var uid, gid int
+    var err error
+    var username string
+    
+    // If user is empty, no user switching is needed
+    if user == "" {
+        return nil
+    }
+    
+    // Input validation and parsing
+    if strings.Contains(user, ":") {
+        // Format: uid:gid
+        parts := strings.Split(user, ":")
+        if len(parts) != 2 {
+            return fmt.Errorf("invalid user format, expected uid:gid")
+        }
+        
+        uid, err = strconv.Atoi(parts[0])
+        if err != nil {
+            return fmt.Errorf("invalid uid: %v", err)
+        }
+        
+        gid, err = strconv.Atoi(parts[1])
+        if err != nil {
+            return fmt.Errorf("invalid gid: %v", err)
+        }
+        
+        username = parts[0] // Use uid as username for environment
+    } else {
+        // Check if it's a numeric uid
+        if uid, err = strconv.Atoi(user); err == nil {
+            // Use same value for gid as uid (common container practice)
+            gid = uid
+            username = user
+        } else {
+            // Try to look up username using standard library
+            uid, gid, err = lookupUserImproved(user)
+            if err != nil {
+                return fmt.Errorf("failed to lookup user %s: %v", user, err)
+            }
+            username = user
+        }
+    }
+    
+    // Bounds checking for uid/gid
+    if uid < 0 || uid > 65535 || gid < 0 || gid > 65535 {
+        return fmt.Errorf("uid/gid out of valid range (0-65535): uid=%d, gid=%d", uid, gid)
+    }
+    
+    // Security check: validate user permissions
+    if err := validateUserPermissions(uid, gid); err != nil {
+        return err
+    }
+    
+    log.Printf("Switching to user: uid=%d, gid=%d", uid, gid)
+    
+    // Get supplementary groups for the user
+    groups, err := getUserGroups(username, gid)
+    if err != nil {
+        log.Printf("Warning: failed to get supplementary groups: %v", err)
+        groups = []int{gid} // Fallback to primary group only
+    }
+    
+    // Set supplementary groups for better security
+    if err := syscall.Setgroups(groups); err != nil {
+        return fmt.Errorf("failed to set supplementary groups: %v", err)
+    }
+    
+    // Set group ID first (must be done before setting user ID)
+    if err := syscall.Setgid(gid); err != nil {
+        return fmt.Errorf("failed to set gid %d: %v", gid, err)
+    }
+    
+    // Set user ID
+    if err := syscall.Setuid(uid); err != nil {
+        return fmt.Errorf("failed to set uid %d: %v", uid, err)
+    }
+    
+    // Update environment variables to reflect the user change
+    if err := os.Setenv("USER", username); err != nil {
+        log.Printf("Warning: failed to set USER environment variable: %v", err)
+    }
+    
+    // Set HOME directory using actual home directory from user lookup when available
+    homeDir := getHomeDirectory(uid, username)
+    if err := os.Setenv("HOME", homeDir); err != nil {
+        log.Printf("Warning: failed to set HOME environment variable: %v", err)
+    }
+    
+    log.Printf("User switch completed: USER=%s, HOME=%s", username, homeDir)
+    
     return nil
+}
+
+// lookupUserImproved uses the standard library for better user lookup
+func lookupUserImproved(username string) (int, int, error) {
+    u, err := user.Lookup(username)
+    if err != nil {
+        // Fallback to manual parsing if standard library fails
+        log.Printf("Standard user lookup failed, falling back to manual parsing: %v", err)
+        return lookupUserFallback(username)
+    }
+    
+    uid, err := strconv.Atoi(u.Uid)
+    if err != nil {
+        return 0, 0, fmt.Errorf("invalid uid in user entry: %v", err)
+    }
+    
+    gid, err := strconv.Atoi(u.Gid)
+    if err != nil {
+        return 0, 0, fmt.Errorf("invalid gid in user entry: %v", err)
+    }
+    
+    return uid, gid, nil
+}
+
+// getHomeDirectory determines the appropriate home directory
+func getHomeDirectory(uid int, username string) string {
+    // Default for root
+    if uid == 0 {
+        return "/root"
+    }
+    
+    // Try to get actual home directory from user lookup
+    if u, err := user.LookupId(strconv.Itoa(uid)); err == nil && u.HomeDir != "" {
+        return u.HomeDir
+    }
+    
+    // Fallback to conventional path
+    return fmt.Sprintf("/home/%s", username)
+}
+
+// lookupUserFallback provides manual /etc/passwd parsing as fallback
+func lookupUserFallback(username string) (int, int, error) {
+    passwdFile := "/etc/passwd"
+    
+    // Check if passwd file exists
+    if _, err := os.Stat(passwdFile); os.IsNotExist(err) {
+        return 0, 0, fmt.Errorf("user lookup not available (no /etc/passwd)")
+    }
+    
+    // Read and parse /etc/passwd
+    content, err := os.ReadFile(passwdFile)
+    if err != nil {
+        return 0, 0, fmt.Errorf("failed to read /etc/passwd: %v", err)
+    }
+    
+    lines := strings.Split(string(content), "\n")
+    for _, line := range lines {
+        if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
+            continue
+        }
+        
+        fields := strings.Split(line, ":")
+        if len(fields) >= 4 && fields[0] == username {
+            uid, err := strconv.Atoi(fields[2])
+            if err != nil {
+                return 0, 0, fmt.Errorf("invalid uid in passwd entry: %v", err)
+            }
+            
+            gid, err := strconv.Atoi(fields[3])
+            if err != nil {
+                return 0, 0, fmt.Errorf("invalid gid in passwd entry: %v", err)
+            }
+            
+            return uid, gid, nil
+        }
+    }
+    
+    return 0, 0, fmt.Errorf("user %s not found", username)
+}
+
+// validateUserPermissions checks if the current process has permission to switch to the target user
+func validateUserPermissions(targetUID, targetGID int) error {
+    currentUID := os.Getuid()
+    currentGID := os.Getgid()
+    
+    // Root can switch to any user
+    if currentUID == 0 {
+        return nil
+    }
+    
+    // Non-root can only switch to same user/group
+    if targetUID != currentUID || targetGID != currentGID {
+        return fmt.Errorf("insufficient privileges: current user %d:%d cannot switch to %d:%d", 
+            currentUID, currentGID, targetUID, targetGID)
+    }
+    
+    return nil
+}
+
+// getUserGroups gets supplementary groups for a user
+func getUserGroups(username string, gid int) ([]int, error) {
+    // For now, return just the primary group
+    // In a more complete implementation, this would parse /etc/group
+    // or use a more sophisticated user lookup
+    return []int{gid}, nil
 }
 
 
