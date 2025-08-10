@@ -19,32 +19,6 @@ import (
 	"encoding/json"
 )
 
-// Linux capability constants and types (missing from unix package on some platforms)
-const (
-    // prctl() commands
-    PR_SET_KEEPCAPS         = 8
-    PR_CAPBSET_DROP         = 24
-    PR_CAP_AMBIENT          = 47
-    PR_CAP_AMBIENT_RAISE    = 2
-    PR_CAP_AMBIENT_LOWER    = 3
-    PR_CAP_AMBIENT_CLEAR_ALL = 4
-    
-    // Linux capability version
-    LINUX_CAPABILITY_VERSION_3 = 0x20080522
-)
-
-// CapUserHeader represents the capability user header
-type CapUserHeader struct {
-    Version uint32
-    Pid     int32
-}
-
-// CapUserData represents capability user data
-type CapUserData struct {
-    Effective   uint32
-    Permitted   uint32
-    Inheritable uint32
-}
 
 // capget syscall wrapper
 func capget(header *CapUserHeader, data *CapUserData) error {
@@ -64,84 +38,6 @@ func capset(header *CapUserHeader, data *CapUserData) error {
     return nil
 }
 
-type LoggingConfig struct {
-    LogDir        string 
-    EnableLogging bool   
-    MaxLogSize    int64  // Maximum log size before rotation (bytes)
-}
-
-type MonitoringConfig struct {
-    Enabled          bool   
-    Interval         int    
-    StatsFile        string 
-    MonitorCpu       bool   
-    MonitorMemory    bool   
-    MonitorProcesses bool   
-}
-
-type Mount struct {
-    Source      string
-    Destination string
-    ReadOnly    bool
-}
-
-type NetworkConfig struct {
-    Bridge      string
-    ContainerIP string
-    PortMaps    []PortMapping
-}
-
-// Config stores container configuration
-type Config struct {
-    Rootfs       string
-    ProcessLimit int
-    MemoryLimit  string
-    CpuShare     string
-    EnvVars      map[string]string
-    Command      []string
-    Mounts       []Mount
-    UseLayers    bool     
-    ImageLayers  []string 
-    User         string   
-    Capabilities []string 
-	Network NetworkConfig
-	LogConfig LoggingConfig
-    MonitorConfig MonitoringConfig
-	ContainerID  string         // Unique ID for the container
-    State        ContainerState // Current state of the container
-    Interactive  bool           // Whether to run in interactive mode
-    Detached     bool           
-    StateDir     string         // Directory to store container state
-}
-
-type PortMapping struct {
-    HostPort      int
-    ContainerPort int
-    Protocol      string // "tcp" or "udp"
-}
-type ContainerState struct {
-    ID           string            // Container unique identifier
-    Pid          int               // Process ID of the container
-    Status       string            // "running", "stopped", "paused"
-    CreatedAt    time.Time         // Time when the container was created
-    Command      []string          // Command being run in the container
-    RootDir      string            // Root directory of the container
-    EnvVars      map[string]string // Environment variables
-    Mounts       []Mount           // Mounted volumes
-    Interactive  bool              // Whether container is interactive
-    Detached     bool              // Whether container is detached
-    LogDir       string            // Directory containing logs
-    ResourceLimits struct {        // Resource limits
-        Memory      string
-        CPU         string
-        ProcessLimit int
-    }
-	Network struct {               // Network configuration
-        ContainerIP string
-        Bridge      string
-        PortMaps    []PortMapping
-    }
-}
 
 
 func setupCapabilities(config *Config) error {
