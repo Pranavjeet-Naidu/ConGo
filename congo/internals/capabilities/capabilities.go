@@ -6,7 +6,7 @@ import (
     "syscall"
     "unsafe"
     
-    "congo/internals/types"
+    "congo/congo/internals/types"
 )
 
 

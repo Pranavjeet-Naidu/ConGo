@@ -17,6 +17,11 @@ const (
     LINUX_CAPABILITY_VERSION_3 = 0x20080522
 )
 
+//wrapper constants 
+const(
+	SYS_CAPGET = 125
+	SYS_CAPSET = 126
+)
 
 var CapMap = map[string]uintptr{
 		"CAP_CHOWN":            0,

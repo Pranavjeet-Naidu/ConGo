@@ -1,20 +1,21 @@
-
 package main
 
 import (
-    "fmt"
-    "log"
-    "os"
-    "os/exec"
-    "path/filepath"
-    "strconv"
-    "strings"
-    "syscall"
-    "unsafe"
-    // "golang.org/x/sys/unix"
-    "net"
-    "time"
+	"fmt"
+	"go/types"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+	"unsafe"
+
+	// "golang.org/x/sys/unix"
 	"encoding/json"
+	"net"
+	"time"
 )
 
 // Linux capability constants and types (missing from unix package on some platforms)
@@ -31,21 +32,12 @@ const (
     LINUX_CAPABILITY_VERSION_3 = 0x20080522
 )
 
-// CapUserHeader represents the capability user header
-type CapUserHeader struct {
-    Version uint32
-    Pid     int32
-}
 
-// CapUserData represents capability user data
-type CapUserData struct {
-    Effective   uint32
-    Permitted   uint32
-    Inheritable uint32
-}
+
+
 
 // capget syscall wrapper
-func capget(header *CapUserHeader, data *CapUserData) error {
+func capget(header *types.CapUserHeader, data *CapUserData) error {
     _, _, errno := syscall.Syscall(syscall.SYS_CAPGET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
     if errno != 0 {
         return errno

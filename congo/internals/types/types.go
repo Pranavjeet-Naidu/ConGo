@@ -1,10 +1,10 @@
 package types 
 
 import (
-	"fmt"
+	//"fmt"
 	"time"
-	"syscall"
-	"unsafe"
+	//"syscall"
+	//"unsafe"
 )
 
 type CapUserHeader struct {
