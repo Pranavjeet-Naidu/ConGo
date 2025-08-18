@@ -36,31 +36,31 @@ func main() {
     switch os.Args[1] {
     case "create":
         // Create a new container but don't start it
-        config, err := config.ParseConfig(os.Args[2:], false)
+        cfg, err := config.ParseConfig(os.Args[2:], false)
         if err != nil {
             log.Fatalf("Error parsing config: %v", err)
         }
         
         // Generate a unique container ID if not provided
-        if config.ContainerID == "" {
-            config.ContainerID = fmt.Sprintf("congo-%d", time.Now().UnixNano())
+        if cfg.ContainerID == "" {
+            cfg.ContainerID = fmt.Sprintf("congo-%d", time.Now().UnixNano())
         }
         
         // Initialize container state
-        config.State = types.ContainerState{
-            ID:        config.ContainerID,
+        cfg.State = types.ContainerState{
+            ID:        cfg.ContainerID,
             Status:    "created",
             CreatedAt: time.Now(),
-            Command:   config.Command,
-            RootDir:   config.Rootfs,
+            Command:   cfg.Command,
+            RootDir:   cfg.Rootfs,
         }
         
         // Save the container state
-        if err := container.SaveContainerState(config.ContainerID, config.State); err != nil {
+        if err := container.SaveContainerState(cfg.ContainerID, cfg.State); err != nil {
             log.Fatalf("Error saving container state: %v", err)
         }
-        
-        fmt.Printf("Container created: %s\n", config.ContainerID)
+
+        fmt.Printf("Container created: %s\n", cfg.ContainerID)
 
 	case "commit":
 		// Create an image from a container
@@ -193,21 +193,21 @@ func main() {
     case "child":
         // Handle child process (container process)
         isChild := true
-        config, err := config.ParseConfig(os.Args[2:], isChild)
+        cfg, err := config.ParseConfig(os.Args[2:], isChild)
         if err != nil {
             log.Fatalf("Error parsing config: %v", err)
         }
 
-        if err := config.ValidateConfig(config); err != nil {
+        if err := config.ValidateConfig(cfg); err != nil {
             log.Fatalf("Invalid config: %v", err)
         }
 
-        if err := setups.SetupContainer(config); err != nil {
+        if err := setups.SetupContainer(cfg); err != nil {
             log.Fatalf("Error setting up container: %v", err)
         }
 
         // Check if interactive mode is requested
-        if config.Interactive {
+        if cfg.Interactive {
             // In interactive mode, start a shell
             if err := unix.Exec("/bin/bash", []string{"bash"}, os.Environ()); err != nil {
                 // Try to fall back to sh if bash is not available
@@ -217,7 +217,7 @@ func main() {
             }
         } else {
             // In non-interactive mode, execute the specified command
-            if err := unix.Exec(config.Command[0], config.Command, os.Environ()); err != nil {
+            if err := unix.Exec(cfg.Command[0], cfg.Command, os.Environ()); err != nil {
                 log.Fatalf("Error executing command: %v", err)
             }
         }
@@ -312,33 +312,33 @@ func main() {
     case "run":
 		
         // Create and start a container in one step
-        config, err := config.ParseConfig(os.Args[2:], false)
+        cfg, err := config.ParseConfig(os.Args[2:], false)
         if err != nil {
             log.Fatalf("Error parsing config: %v", err)
         }
-        config.State.Network.ContainerIP = config.Network.ContainerIP
-		config.State.Network.Bridge = config.Network.Bridge
-		config.State.Network.PortMaps = config.Network.PortMaps
-        if err := config.ValidateConfig(); err != nil {
+        cfg.State.Network.ContainerIP = cfg.Network.ContainerIP
+		cfg.State.Network.Bridge = cfg.Network.Bridge
+		cfg.State.Network.PortMaps = cfg.Network.PortMaps
+        if err := config.ValidateConfig(cfg); err != nil {
             log.Fatalf("Invalid config: %v", err)
         }
         
         // Generate a unique container ID
-        if config.ContainerID == "" {
-            config.ContainerID = fmt.Sprintf("congo-%d", time.Now().UnixNano())
+        if cfg.ContainerID == "" {
+            cfg.ContainerID = fmt.Sprintf("congo-%d", time.Now().UnixNano())
         }
         
         // Initialize container state
-        config.State = types.ContainerState{
-            ID:        config.ContainerID,
+        cfg.State = types.ContainerState{
+            ID:        cfg.ContainerID,
             Status:    "created", // Will be updated to "running" when started
             CreatedAt: time.Now(),
-            Command:   config.Command,
-            RootDir:   config.Rootfs,
+            Command:   cfg.Command,
+            RootDir:   cfg.Rootfs,
         }
         
         // Save the container state
-        if err := container.SaveContainerState(config.ContainerID, config.State); err != nil {
+        if err := container.SaveContainerState(cfg.ContainerID, cfg.State); err != nil {
             log.Fatalf("Error saving container state: %v", err)
         }
         
@@ -376,24 +376,24 @@ func main() {
         }
         
         // Update container state
-        config.State.Status = "running"
-        config.State.Pid = cmd.Process.Pid
-        if err := saveContainerState(config.ContainerID, config.State); err != nil {
+        cfg.State.Status = "running"
+        cfg.State.Pid = cmd.Process.Pid
+        if err := saveContainerState(cfg.ContainerID, cfg.State); err != nil {
             log.Printf("Warning: failed to update container state: %v", err)
         }
         
-        fmt.Printf("Container started: %s\n", config.ContainerID)
+        fmt.Printf("Container started: %s\n", cfg.ContainerID)
         
         // If not detached, wait for the container to exit
-        if !config.Detached {
+        if !cfg.Detached {
             if err := cmd.Wait(); err != nil {
                 log.Printf("Container exited with error: %v", err)
             }
             
             // Update container state to stopped
-            config.State.Status = "stopped"
-            config.State.Pid = 0
-            if err := saveContainerState(config.ContainerID, config.State); err != nil {
+            cfg.State.Status = "stopped"
+            cfg.State.Pid = 0
+            if err := container.SaveContainerState(cfg.ContainerID, cfg.State); err != nil {
                 log.Printf("Warning: failed to update container state: %v", err)
             }
         }
