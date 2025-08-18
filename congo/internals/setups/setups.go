@@ -267,9 +267,9 @@ func SetupContainer(config *types.Config) error {
 
 // SetupCapabilities configures Linux capabilities for the container
 func SetupCapabilities(config *types.Config) error {
-    capabilities := config.Capabilities
+    caps := config.Capabilities
     
-    if len(capabilities) == 0 {
+    if len(caps) == 0 {
         // Drop all capabilities by default
         log.Println("Dropping all capabilities")
         if err := capabilities.ClearAllCapabilities(); err != nil {
@@ -279,7 +279,7 @@ func SetupCapabilities(config *types.Config) error {
     }
 
     // Keep only specified capabilities
-    log.Printf("Setting up capabilities: %v", capabilities)
+    log.Printf("Setting up capabilities: %v", caps)
     
     // First drop all capabilities
     if err := capabilities.ClearAllCapabilities(); err != nil {
@@ -287,7 +287,7 @@ func SetupCapabilities(config *types.Config) error {
     }
     
     // Then add back the ones specified
-    for _, cap := range capabilities {
+    for _, cap := range caps {
         capValue, exists := types.CapMap[cap]
         if !exists {
             return fmt.Errorf("unknown capability: %s", cap)

@@ -23,6 +23,7 @@ import (
 	"congo/congo/internals/config"
 	"congo/congo/internals/container"
 	"congo/congo/internals/logging"
+	"congo/congo/internals/setups"
 	"congo/congo/internals/types"
 )
 
@@ -201,7 +202,7 @@ func main() {
             log.Fatalf("Invalid config: %v", err)
         }
 
-        if err := container.SetupContainer(config); err != nil {
+        if err := setups.SetupContainer(config); err != nil {
             log.Fatalf("Error setting up container: %v", err)
         }
 
@@ -228,7 +229,7 @@ func main() {
 		}
 		containerID := os.Args[2]
 		
-		if err := pauseContainer(containerID); err != nil {
+		if err := container.PauseContainer(containerID); err != nil {
 			log.Fatalf("Error pausing container: %v", err)
 		}
 		
@@ -241,7 +242,7 @@ func main() {
 		}
 		containerID := os.Args[2]
 		
-		if err := unpauseContainer(containerID); err != nil {
+		if err := container.UnpauseContainer(containerID); err != nil {
 			log.Fatalf("Error unpausing container: %v", err)
 		}
 		
@@ -272,7 +273,7 @@ func main() {
 			}
 		}
 		
-		if err := updateContainerResources(containerID, memory, cpu, pids); err != nil {
+		if err := container.UpdateContainerResources(containerID, memory, cpu, pids); err != nil {
 			log.Fatalf("Error updating container resources: %v", err)
 		}
 		
@@ -288,7 +289,7 @@ func main() {
 		containerPath := os.Args[4]
 		readOnly := len(os.Args) > 5 && os.Args[5] == "ro"
 		
-		if err := addVolumeToContainer(containerID, hostPath, containerPath, readOnly); err != nil {
+		if err := container.AddVolumeToContainer(containerID, hostPath, containerPath, readOnly); err != nil {
 			log.Fatalf("Error adding volume: %v", err)
 		}
 		
@@ -301,8 +302,8 @@ func main() {
 		}
 		containerID := os.Args[2]
 		containerPath := os.Args[3]
-		
-		if err := removeVolumeFromContainer(containerID, containerPath); err != nil {
+
+		if err := container.RemoveVolumeFromContainer(containerID, containerPath); err != nil {
 			log.Fatalf("Error removing volume: %v", err)
 		}
 		
@@ -311,14 +312,14 @@ func main() {
     case "run":
 		
         // Create and start a container in one step
-        config, err := parseConfig(os.Args[2:], false)
+        config, err := config.ParseConfig(os.Args[2:], false)
         if err != nil {
             log.Fatalf("Error parsing config: %v", err)
         }
         config.State.Network.ContainerIP = config.Network.ContainerIP
 		config.State.Network.Bridge = config.Network.Bridge
 		config.State.Network.PortMaps = config.Network.PortMaps
-        if err := validateConfig(config); err != nil {
+        if err := config.ValidateConfig(); err != nil {
             log.Fatalf("Invalid config: %v", err)
         }
         
@@ -328,7 +329,7 @@ func main() {
         }
         
         // Initialize container state
-        config.State = ContainerState{
+        config.State = types.ContainerState{
             ID:        config.ContainerID,
             Status:    "created", // Will be updated to "running" when started
             CreatedAt: time.Now(),
@@ -337,7 +338,7 @@ func main() {
         }
         
         // Save the container state
-        if err := saveContainerState(config.ContainerID, config.State); err != nil {
+        if err := container.SaveContainerState(config.ContainerID, config.State); err != nil {
             log.Fatalf("Error saving container state: %v", err)
         }
         
