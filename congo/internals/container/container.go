@@ -273,7 +273,7 @@ func AddVolumeToContainer(containerID, hostPath, containerPath string, readOnly 
 	return nil
 }
 
-func removeVolumeFromContainer(containerID, containerPath string) error {
+func RemoveVolumeFromContainer(containerID, containerPath string) error {
 	// Load container state
 	state, err := LoadContainerState(containerID)
 	if err != nil {
@@ -344,7 +344,7 @@ func StartContainer(containerID string, args []string) error {
 	}
 
 	// Reconstruct container configuration
-	containerArgs := buildArgsFromState(state)
+	containerArgs := BuildArgsFromState(state)
 
 	// Merge with any additional args provided
 	if len(args) > 0 {
@@ -467,12 +467,12 @@ func StopContainer(containerID string, force bool) error {
 	}
 
 	// Clean up network resources
-	if err := cleanupContainerNetwork(state.Pid); err != nil {
+	if err := CleanupContainerNetwork(state.Pid); err != nil {
 		log.Printf("Warning: failed to clean up container network: %v", err)
 	}
 
 	// Clean up any port forwarding rules
-	if err := cleanupPortForwarding(containerID); err != nil {
+	if err := CleanupPortForwarding(containerID); err != nil {
 		log.Printf("Warning: failed to clean up port forwarding rules: %v", err)
 	}
 
@@ -486,7 +486,7 @@ func StopContainer(containerID string, force bool) error {
 	return nil
 }
 
-func cleanupContainerNetwork(pid int) error {
+func CleanupContainerNetwork(pid int) error {
 	// Clean up veth pair - the host side only, container side vanishes with namespace
 	hostVeth := fmt.Sprintf("hveth%d", pid)
 
@@ -501,7 +501,7 @@ func cleanupContainerNetwork(pid int) error {
 	return nil
 }
 
-func cleanupPortForwarding(containerID string) error {
+func CleanupPortForwarding(containerID string) error {
 	// Get container state to find any port mappings
 	state, err := LoadContainerState(containerID)
 	if err != nil {
@@ -558,7 +558,7 @@ func RestartContainer(containerID string) error {
 	}
 
 	// Reconstruct arguments needed to start the container
-	args := buildArgsFromState(state)
+	args := BuildArgsFromState(state)
 
 	// Start the container again
 	if err := StartContainer(containerID, args); err != nil {
@@ -672,7 +672,7 @@ func ListContainers() ([]types.ContainerState, error) {
 	return containers, nil
 }
 
-func buildArgsFromState(state types.ContainerState) []string {
+func BuildArgsFromState(state types.ContainerState) []string {
 	// Create a basic set of environment variables
 	args := []string{
 		"/bin/sh",     // Default PATH
@@ -698,7 +698,7 @@ func buildArgsFromState(state types.ContainerState) []string {
 	return args
 }
 
-func parseMountSpec(spec string) (types.Mount, error) {
+func ParseMountSpec(spec string) (types.Mount, error) {
 	parts := strings.Split(spec, ":")
 	if len(parts) < 2 || len(parts) > 3 {
 		return types.Mount{}, fmt.Errorf("invalid mount specification: %s", spec)
@@ -713,7 +713,7 @@ func parseMountSpec(spec string) (types.Mount, error) {
 	return mount, nil
 }
 
-func mustAtoi(s string) int {
+func MustAtoi(s string) int {
 	i, err := strconv.Atoi(s)
 	if err != nil {
 		log.Fatalf("Invalid number %s: %v", s, err)
