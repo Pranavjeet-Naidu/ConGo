@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package setups
 
 import (
@@ -7,20 +10,22 @@ import (
     "os"
     "strconv"
     "strings"
-    "syscall"
-    
-   // "congo/congo/internals/types"
-	"congo/congo/internals/utils/userUtils"
-	"congo/congo/internals/utils/generalUtils"
+    "golang.org/x/sys/unix"
+    "path/filepath"
+    "congo/congo/internals/types"
+    "congo/congo/internals/capabilities"
+    "congo/congo/internals/utils"
+    "congo/congo/internals/filesystem"
+    //"congo/congo/internals/logging"
+    "congo/congo/internals/monitoring"
+    "congo/congo/internals/cgroups"
 )
 
-
-
-func setupUser(user string) error {
-    return setupUserWithContext(context.Background(), user)
+func SetupUser(user string) error {
+    return SetupUserWithContext(context.Background(), user)
 }
 
-func setupUserWithContext(ctx context.Context, user string) error {
+func SetupUserWithContext(ctx context.Context, user string) error {
     // Check for context cancellation
     select {
     case <-ctx.Done():
@@ -65,7 +70,7 @@ func setupUserWithContext(ctx context.Context, user string) error {
             username = user
         } else {
             // Try to look up username using standard library
-            uid, gid, err = userUtils.LookupUser(user)
+            uid, gid, err = utils.LookupUser(user)
             if err != nil {
                 return fmt.Errorf("failed to lookup user %s: %v", user, err)
             }
@@ -79,31 +84,31 @@ func setupUserWithContext(ctx context.Context, user string) error {
     }
     
     // Security check: validate user permissions
-    if err := userUtils.ValidateUserPermissions(uid, gid); err != nil {
+    if err := utils.ValidateUserPermissions(uid, gid); err != nil {
         return err
     }
     
     log.Printf("Switching to user: uid=%d, gid=%d", uid, gid)
     
     // Get supplementary groups for the user
-    groups, err := userUtils.GetUserGroups(username, gid)
+    groups, err := utils.GetUserGroups(username, gid)
     if err != nil {
         log.Printf("Warning: failed to get supplementary groups: %v", err)
         groups = []int{gid} // Fallback to primary group only
     }
     
     // Set supplementary groups for better security
-    if err := syscall.Setgroups(groups); err != nil {
+    if err := unix.Setgroups(groups); err != nil {
         return fmt.Errorf("failed to set supplementary groups: %v", err)
     }
     
     // Set group ID first (must be done before setting user ID)
-    if err := syscall.Setgid(gid); err != nil {
+    if err := unix.Setgid(gid); err != nil {
         return fmt.Errorf("failed to set gid %d: %v", gid, err)
     }
     
     // Set user ID
-    if err := syscall.Setuid(uid); err != nil {
+    if err := unix.Setuid(uid); err != nil {
         return fmt.Errorf("failed to set uid %d: %v", uid, err)
     }
     
@@ -113,7 +118,7 @@ func setupUserWithContext(ctx context.Context, user string) error {
     }
     
     // Set HOME directory using actual home directory from user lookup when available
-    homeDir := generalUtils.getHomeDirectory(uid, username)
+    homeDir := utils.GetHomeDirectory(uid, username)
     if err := os.Setenv("HOME", homeDir); err != nil {
         log.Printf("Warning: failed to set HOME environment variable: %v", err)
     }
@@ -123,29 +128,176 @@ func setupUserWithContext(ctx context.Context, user string) error {
     return nil
 }
 
-func setupMounts(mounts []Mount) error {
+func SetupLogging(config *types.Config) error {
+    if !config.LogConfig.EnableLogging {
+        return nil
+    }
+    
+    // Create log directory if it doesn't exist
+    if err := os.MkdirAll(config.LogConfig.LogDir, 0755); err != nil {
+        return fmt.Errorf("failed to create log directory: %v", err)
+    }
+    
+    // Create stdout log file
+    stdoutPath := filepath.Join(config.LogConfig.LogDir, fmt.Sprintf("container-%d-stdout.log", os.Getpid()))
+    stdoutFile, err := os.OpenFile(stdoutPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    if err != nil {
+        return fmt.Errorf("failed to open stdout log file: %v", err)
+    }
+    
+    // Create stderr log file
+    stderrPath := filepath.Join(config.LogConfig.LogDir, fmt.Sprintf("container-%d-stderr.log", os.Getpid()))
+    stderrFile, err := os.OpenFile(stderrPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    if err != nil {
+        stdoutFile.Close()
+        return fmt.Errorf("failed to open stderr log file: %v", err)
+    }
+    
+    // Redirect standard output
+    if err := unix.Dup2(int(stdoutFile.Fd()), int(os.Stdout.Fd())); err != nil {
+        stdoutFile.Close()
+        stderrFile.Close()
+        return fmt.Errorf("failed to redirect stdout: %v", err)
+    }
+    
+    // Redirect standard error
+    if err := unix.Dup2(int(stderrFile.Fd()), int(os.Stderr.Fd())); err != nil {
+        stdoutFile.Close()
+        stderrFile.Close()
+        return fmt.Errorf("failed to redirect stderr: %v", err)
+    }
+    
+    // Log that logging has been set up successfully
+    fmt.Printf("Logging initialized: stdout -> %s, stderr -> %s\n", stdoutPath, stderrPath)
+    
+    return nil
+}
+
+func SetupMounts(mounts []types.Mount) error {
     for _, mount := range mounts {
         if err := os.MkdirAll(mount.Destination, 0755); err != nil {
             return fmt.Errorf("failed to create mount point: %v", err)
         }
 
-        flags := syscall.MS_BIND
+        flags := unix.MS_BIND
         if mount.ReadOnly {
-            flags |= syscall.MS_RDONLY
+            flags |= unix.MS_RDONLY
         }
 
-        if err := syscall.Mount(mount.Source, mount.Destination, "", uintptr(flags), ""); err != nil {
+        if err := unix.Mount(mount.Source, mount.Destination, "", uintptr(flags), ""); err != nil {
             return fmt.Errorf("failed to mount: %v", err)
         }
     }
     return nil
 }
 
-func setupEnv(envVars map[string]string) error {
+func SetupEnv(envVars map[string]string) error {
     for key, value := range envVars {
         if err := os.Setenv(key, value); err != nil {
             return fmt.Errorf("failed to set environment variable: %v", err)
         }
     }
+    return nil
+}
+
+func SetupContainer(config *types.Config) error {
+    defer utils.Cleanup(config)
+
+    // Set hostname
+    if err := unix.Sethostname([]byte("container")); err != nil {
+        return fmt.Errorf("error setting hostname: %v", err)
+    }
+
+    // Setup root filesystem
+    if config.UseLayers {
+        if err := filesystem.SetupLayeredRootfs(config); err != nil {
+            return fmt.Errorf("error setting up layered rootfs: %v", err)
+        }
+    } else {
+        if err := filesystem.SetupRootfs(config.Rootfs); err != nil {
+            return fmt.Errorf("error setting up rootfs: %v", err)
+        }
+    }
+    
+    // Add capability setup early in the process
+    if err := capabilities.SetupCapabilities(config); err != nil {
+        return fmt.Errorf("error setting up capabilities: %v", err)
+    }
+
+    // Setup bind mounts
+    if err := SetupMounts(config.Mounts); err != nil {
+        return fmt.Errorf("error performing bind mounts: %v", err)
+    }
+
+    // Setup cgroups
+    if err := cgroups.SetupCgroups(config); err != nil {
+        return fmt.Errorf("error setting up cgroups: %v", err)
+    }
+
+    // Setup user (new functionality)
+    if config.User != "" {
+        if err := SetupUser(config.User); err != nil {
+            return fmt.Errorf("error setting up user: %v", err)
+        }
+    }
+
+    // Setup environment variables
+    for k, v := range config.EnvVars {
+        if err := os.Setenv(k, v); err != nil {
+            return fmt.Errorf("error setting environment variable %s: %v", k, err)
+        }
+    }
+
+    // Setup logging if enabled
+    if config.LogConfig.EnableLogging {
+        if err := SetupLogging(config); err != nil {
+            return fmt.Errorf("error setting up logging: %v", err)
+        }
+    }
+    
+    // Start resource monitoring if enabled
+    if config.MonitorConfig.Enabled {
+        if err := monitoring.StartResourceMonitoring(config); err != nil {
+            return fmt.Errorf("error starting resource monitoring: %v", err)
+        }
+    }
+
+    return nil
+}
+
+// SetupCapabilities configures Linux capabilities for the container
+func SetupCapabilities(config *types.Config) error {
+    capabilities := config.Capabilities
+    
+    if len(capabilities) == 0 {
+        // Drop all capabilities by default
+        log.Println("Dropping all capabilities")
+        if err := capabilities.ClearAllCapabilities(); err != nil {
+            return fmt.Errorf("failed to clear all capabilities: %v", err)
+        }
+        return nil
+    }
+
+    // Keep only specified capabilities
+    log.Printf("Setting up capabilities: %v", capabilities)
+    
+    // First drop all capabilities
+    if err := capabilities.ClearAllCapabilities(); err != nil {
+        return fmt.Errorf("failed to clear all capabilities: %v", err)
+    }
+    
+    // Then add back the ones specified
+    for _, cap := range capabilities {
+        capValue, exists := types.CapMap[cap]
+        if !exists {
+            return fmt.Errorf("unknown capability: %s", cap)
+        }
+        
+        if err := capabilities.AddCapability(capValue); err != nil {
+            return fmt.Errorf("failed to add capability %s: %v", cap, err)
+        }
+        log.Printf("Added capability: %s", cap)
+    }
+    
     return nil
 }

@@ -1,23 +1,29 @@
+//go:build linux
+// +build linux
 
 package main
 
 import (
-    //"context"
-    "fmt"
-    "log"
-    "os"
-    "os/exec"
-    //"os/user"
-    "path/filepath"
-    "strconv"
-    "strings"
-    "syscall"
-    //"unsafe"
-    //"golang.org/x/sys/unix"
-    //"net"
-    "time"
+	//"context"
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+
+	//"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	//"unsafe"
+	"golang.org/x/sys/unix"
+	//"net"
+	"time"
 	//"encoding/json"
-    //"congo/congo/internals/types"
+	"congo/congo/internals/config"
+	"congo/congo/internals/container"
+	"congo/congo/internals/logging"
+	"congo/congo/internals/types"
 )
 
 func main() {
@@ -29,7 +35,7 @@ func main() {
     switch os.Args[1] {
     case "create":
         // Create a new container but don't start it
-        config, err := parseConfig(os.Args[2:], false)
+        config, err := config.ParseConfig(os.Args[2:], false)
         if err != nil {
             log.Fatalf("Error parsing config: %v", err)
         }
@@ -40,7 +46,7 @@ func main() {
         }
         
         // Initialize container state
-        config.State = ContainerState{
+        config.State = types.ContainerState{
             ID:        config.ContainerID,
             Status:    "created",
             CreatedAt: time.Now(),
@@ -49,7 +55,7 @@ func main() {
         }
         
         // Save the container state
-        if err := saveContainerState(config.ContainerID, config.State); err != nil {
+        if err := container.SaveContainerState(config.ContainerID, config.State); err != nil {
             log.Fatalf("Error saving container state: %v", err)
         }
         
@@ -63,7 +69,7 @@ func main() {
 		containerID := os.Args[2]
 		imageName := os.Args[3]
 		
-		if err := commitContainer(containerID, imageName); err != nil {
+		if err := container.CommitContainer(containerID, imageName); err != nil {
 			log.Fatalf("Error committing container: %v", err)
 		}
 		
@@ -76,7 +82,7 @@ func main() {
 		}
 		containerID := os.Args[2]
 		
-		if err := viewContainerLogs(containerID); err != nil {
+		if err := logging.ViewContainerLogs(containerID); err != nil {
 			log.Fatalf("Error viewing container logs: %v", err)
 		}
 	
@@ -87,8 +93,8 @@ func main() {
             log.Fatalf("Usage: %s start <container-id>", os.Args[0])
         }
         containerID := os.Args[2]
-        
-        if err := startContainer(containerID, os.Args[3:]); err != nil {
+
+        if err := container.StartContainer(containerID, os.Args[3:]); err != nil {
             log.Fatalf("Error starting container: %v", err)
         }
         
@@ -101,7 +107,7 @@ func main() {
 		}
 		containerID := os.Args[2]
 		
-		if err := removeContainer(containerID); err != nil {
+		if err := container.RemoveContainer(containerID); err != nil {
 			log.Fatalf("Error removing container: %v", err)
 		}
 		
@@ -115,7 +121,7 @@ func main() {
         containerID := os.Args[2]
         force := len(os.Args) > 3 && os.Args[3] == "--force"
         
-        if err := stopContainer(containerID, force); err != nil {
+        if err := container.StopContainer(containerID, force); err != nil {
             log.Fatalf("Error stopping container: %v", err)
         }
         
@@ -127,8 +133,8 @@ func main() {
             log.Fatalf("Usage: %s restart <container-id>", os.Args[0])
         }
         containerID := os.Args[2]
-        
-        if err := restartContainer(containerID); err != nil {
+
+        if err := container.RestartContainer(containerID); err != nil {
             log.Fatalf("Error restarting container: %v", err)
         }
         
@@ -142,7 +148,7 @@ func main() {
         containerID := os.Args[2]
         command := os.Args[3:]
         
-        if err := execInContainer(containerID, command); err != nil {
+        if err := container.ExecInContainer(containerID, command); err != nil {
             log.Fatalf("Error executing command in container: %v", err)
         }
         
@@ -155,16 +161,16 @@ func main() {
         
         // Default to bash, but fall back to sh if not available
         shell := []string{"/bin/bash"}
-        if err := execInContainer(containerID, shell); err != nil {
+        if err := container.ExecInContainer(containerID, shell); err != nil {
             // Try sh if bash fails
-            if err := execInContainer(containerID, []string{"/bin/sh"}); err != nil {
+            if err := container.ExecInContainer(containerID, []string{"/bin/sh"}); err != nil {
                 log.Fatalf("Error starting shell in container: %v", err)
             }
         }
         
     case "ps":
         // List containers
-        containers, err := listContainers()
+        containers, err := container.ListContainers()
         if err != nil {
             log.Fatalf("Error listing containers: %v", err)
         }
@@ -186,31 +192,31 @@ func main() {
     case "child":
         // Handle child process (container process)
         isChild := true
-        config, err := parseConfig(os.Args[2:], isChild)
+        config, err := config.ParseConfig(os.Args[2:], isChild)
         if err != nil {
             log.Fatalf("Error parsing config: %v", err)
         }
 
-        if err := validateConfig(config); err != nil {
+        if err := config.ValidateConfig(config); err != nil {
             log.Fatalf("Invalid config: %v", err)
         }
 
-        if err := setupContainer(config); err != nil {
+        if err := container.SetupContainer(config); err != nil {
             log.Fatalf("Error setting up container: %v", err)
         }
 
         // Check if interactive mode is requested
         if config.Interactive {
             // In interactive mode, start a shell
-            if err := syscall.Exec("/bin/bash", []string{"bash"}, os.Environ()); err != nil {
+            if err := unix.Exec("/bin/bash", []string{"bash"}, os.Environ()); err != nil {
                 // Try to fall back to sh if bash is not available
-                if err := syscall.Exec("/bin/sh", []string{"sh"}, os.Environ()); err != nil {
+                if err := unix.Exec("/bin/sh", []string{"sh"}, os.Environ()); err != nil {
                     log.Fatalf("Error executing shell: %v", err)
                 }
             }
         } else {
             // In non-interactive mode, execute the specified command
-            if err := syscall.Exec(config.Command[0], config.Command, os.Environ()); err != nil {
+            if err := unix.Exec(config.Command[0], config.Command, os.Environ()); err != nil {
                 log.Fatalf("Error executing command: %v", err)
             }
         }
@@ -340,28 +346,28 @@ func main() {
         cmd.Stdin = os.Stdin
         cmd.Stdout = os.Stdout
         cmd.Stderr = os.Stderr
-        cmd.SysProcAttr = &syscall.SysProcAttr{
-            Cloneflags: syscall.CLONE_NEWUTS |
-                syscall.CLONE_NEWPID |
-                syscall.CLONE_NEWNS |
-                syscall.CLONE_NEWNET |
-                syscall.CLONE_NEWIPC |
-                syscall.CLONE_NEWUSER,
-            UidMappings: []syscall.SysProcIDMap{
+        cmd.SysProcAttr = &unix.SysProcAttr{
+            Cloneflags: unix.CLONE_NEWUTS |
+                unix.CLONE_NEWPID |
+                unix.CLONE_NEWNS |
+                unix.CLONE_NEWNET |
+                unix.CLONE_NEWIPC |
+                unix.CLONE_NEWUSER,
+            UidMappings: []unix.SysProcIDMap{
                 {
                     ContainerID: 0,
                     HostID:     os.Getuid(),
                     Size:       1,
                 },
             },
-            GidMappings: []syscall.SysProcIDMap{
+            GidMappings: []unix.SysProcIDMap{
                 {
                     ContainerID: 0,
                     HostID:     os.Getgid(),
                     Size:       1,
                 },
             },
-            Unshareflags: syscall.CLONE_NEWNS,
+            Unshareflags: unix.CLONE_NEWNS,
         }
         
         if err := cmd.Start(); err != nil {

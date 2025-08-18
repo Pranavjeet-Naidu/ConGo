@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package utils
 
 import (
@@ -8,12 +11,12 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
-	"syscall"
+	"golang.org/x/sys/unix"
 	"strings"
 )
 
 // getHomeDirectory determines the appropriate home directory
-func getHomeDirectory(uid int, username string) string {
+func GetHomeDirectory(uid int, username string) string {
     // Default for root
     if uid == 0 {
         return "/root"
@@ -47,14 +50,14 @@ func Cleanup(config *types.Config) error {
     }
 
     for _, mount := range config.Mounts {
-        if err := syscall.Unmount(mount.Destination, 0); err != nil {
+        if err := unix.Unmount(mount.Destination, 0); err != nil {
             return fmt.Errorf("failed to unmount: %v", err)
         }
     }
     return nil
 }
 
-func parseEnvVars(envStr string) map[string]string {
+func ParseEnvVars(envStr string) map[string]string {
     envVars := make(map[string]string)
     pairs := strings.Split(envStr, ",")
     for _, pair := range pairs {
@@ -66,7 +69,7 @@ func parseEnvVars(envStr string) map[string]string {
     return envVars
 }
 
-func formatEnvVars(envMap map[string]string) string {
+func FormatEnvVars(envMap map[string]string) string {
     var envStrs []string
     for k, v := range envMap {
         envStrs = append(envStrs, fmt.Sprintf("%s=%s", k, v))

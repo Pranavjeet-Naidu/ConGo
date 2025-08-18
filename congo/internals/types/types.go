@@ -1,10 +1,10 @@
+//go:build linux
+// +build linux
+
 package types 
 
 import (
-	//"fmt"
 	"time"
-	//"syscall"
-	//"unsafe"
 )
 
 type CapUserHeader struct {

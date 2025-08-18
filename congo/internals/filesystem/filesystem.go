@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package filesystem
 
 import (
@@ -5,11 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
+    "golang.org/x/sys/unix"
 	"congo/congo/internals/types"
 )
 
-func setupLayeredRootfs(config *types.Config) error {
+func SetupLayeredRootfs(config *types.Config) error {
     // Create work and upper directories
     workDir := filepath.Join(os.TempDir(), "overlay-work")
     upperDir := config.Rootfs
@@ -25,19 +28,19 @@ func setupLayeredRootfs(config *types.Config) error {
     lowerDirs := strings.Join(config.ImageLayers, ":")
     overlayOpts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDirs, upperDir, workDir)
 
-    if err := syscall.Mount("overlay", "/", "overlay", 0, overlayOpts); err != nil {
+    if err := unix.Mount("overlay", "/", "overlay", 0, overlayOpts); err != nil {
         return fmt.Errorf("failed to mount overlay filesystem: %v", err)
     }
 
     return nil
 }
 
-func setupRootfs(rootfs string) error {
-    if err := syscall.Mount("", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, ""); err != nil {
+func SetupRootfs(rootfs string) error {
+    if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
         return fmt.Errorf("error making root private: %v", err)
     }
 
-    if err := syscall.Mount(rootfs, rootfs, "", syscall.MS_BIND|syscall.MS_REC, ""); err != nil {
+    if err := unix.Mount(rootfs, rootfs, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
         return fmt.Errorf("error binding rootfs: %v", err)
     }
 
@@ -45,7 +48,7 @@ func setupRootfs(rootfs string) error {
         return fmt.Errorf("error changing directory to rootfs: %v", err)
     }
 
-    if err := syscall.Mount("proc", "proc", "proc", 0, ""); err != nil {
+    if err := unix.Mount("proc", "proc", "proc", 0, ""); err != nil {
         return fmt.Errorf("error mounting proc: %v", err)
     }
 

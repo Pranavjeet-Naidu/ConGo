@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package network 
 
 import (
@@ -8,11 +11,11 @@ import (
     "strconv"
     "strings"
     
-    "congo/internals/types"
+    "congo/congo/internals/types"
 )
 
 
-func setupNetworking(config *Config) error {
+func setupNetworking(config *types.Config) error {
     // Create bridge if it doesn't exist
     if err := createBridge(config.Network.Bridge); err != nil {
         return fmt.Errorf("failed to create bridge: %v", err)
@@ -105,7 +108,7 @@ func setupContainerNetNS(veth, ip string) error {
     return nil
 }
 
-func setupPortForwarding(portMaps []PortMapping, containerIP string) error {
+func setupPortForwarding(portMaps []types.PortMapping, containerIP string) error {
     for _, port := range portMaps {
         // Add iptables DNAT rule for port forwarding
         rule := fmt.Sprintf(

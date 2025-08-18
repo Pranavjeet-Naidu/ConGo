@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package monitoring
 
 import (
@@ -12,7 +15,7 @@ import (
 )
 
 
-func startResourceMonitoring(config *types.Config) error {
+func StartResourceMonitoring(config *types.Config) error {
     if !config.MonitorConfig.Enabled {
         return nil
     }
@@ -63,7 +66,7 @@ func startResourceMonitoring(config *types.Config) error {
         for {
             select {
             case <-ticker.C:
-                stats, err := collectResourceStats(config)
+                stats, err := CollectResourceStats(config)
                 if err != nil {
                     fmt.Fprintf(statsFile, "Error collecting stats: %v\n", err)
                     continue
@@ -82,7 +85,7 @@ func startResourceMonitoring(config *types.Config) error {
     return nil
 }
 
-func collectResourceStats(config *Config) (string, error) {
+func CollectResourceStats(config *types.Config) (string, error) {
     containerID := fmt.Sprintf("container-%d", os.Getpid())
     var stats strings.Builder
     

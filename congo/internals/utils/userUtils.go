@@ -8,30 +8,7 @@ import(
 	"strconv"
 	"strings"
 )
-func LookupUser(username string) (int, int, error) {
-    u, err := user.Lookup(username)
-    if err != nil {
-        // Fallback to manual parsing if standard library fails
-        log.Printf("Standard user lookup failed, falling back to manual parsing: %v", err)
-        return lookupUserFallback(username)
-    }
-    
-    uid, err := strconv.Atoi(u.Uid)
-    if err != nil {
-        return 0, 0, fmt.Errorf("invalid uid in user entry: %v", err)
-    }
-    
-    gid, err := strconv.Atoi(u.Gid)
-    if err != nil {
-        return 0, 0, fmt.Errorf("invalid gid in user entry: %v", err)
-    }
-    
-    return uid, gid, nil
-}
 
-
-
-// lookupUserFallback provides manual /etc/passwd parsing as fallback
 func LookupUserFallback(username string) (int, int, error) {
     passwdFile := "/etc/passwd"
     
@@ -70,6 +47,31 @@ func LookupUserFallback(username string) (int, int, error) {
     
     return 0, 0, fmt.Errorf("user %s not found", username)
 }
+func LookupUser(username string) (int, int, error) {
+    u, err := user.Lookup(username)
+    if err != nil {
+        // Fallback to manual parsing if standard library fails
+        log.Printf("Standard user lookup failed, falling back to manual parsing: %v", err)
+        return LookupUserFallback(username)
+    }
+    
+    uid, err := strconv.Atoi(u.Uid)
+    if err != nil {
+        return 0, 0, fmt.Errorf("invalid uid in user entry: %v", err)
+    }
+    
+    gid, err := strconv.Atoi(u.Gid)
+    if err != nil {
+        return 0, 0, fmt.Errorf("invalid gid in user entry: %v", err)
+    }
+    
+    return uid, gid, nil
+}
+
+
+
+// lookupUserFallback provides manual /etc/passwd parsing as fallback
+
 
 // validateUserPermissions checks if the current process has permission to switch to the target user
 func ValidateUserPermissions(targetUID, targetGID int) error {

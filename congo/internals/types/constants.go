@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package types 
 
 // Linux capability constants and types (missing from unix package on some platforms)

@@ -1,28 +1,28 @@
+//go:build linux
+// +build linux
+
 package capabilities
 
 import (
     "fmt"
     "log"
-    "syscall"
     "unsafe"
-    
+    "golang.org/x/sys/unix"
     "congo/congo/internals/types"
 )
 
-
-
-// capget syscall wrapper
+// capget unix wrapper
 func capget(header *types.CapUserHeader, data *types.CapUserData) error {
-    _, _, errno := syscall.Syscall(syscall.SYS_CAPGET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
+    _, _, errno := unix.Syscall(unix.SYS_CAPGET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
     if errno != 0 {
         return errno
     }
     return nil
 }
 
-// capset syscall wrapper
+// capset unix wrapper
 func capset(header *types.CapUserHeader, data *types.CapUserData) error {
-    _, _, errno := syscall.Syscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
+    _, _, errno := unix.Syscall(unix.SYS_CAPSET, uintptr(unsafe.Pointer(header)), uintptr(unsafe.Pointer(data)), 0)
     if errno != 0 {
         return errno
     }
@@ -30,7 +30,45 @@ func capset(header *types.CapUserHeader, data *types.CapUserData) error {
 }
 
 // SetupCapabilities configures Linux capabilities for the container
-func SetupCapabilities(capabilities []string) error {
+// Fixed signature to accept *types.Config instead of []string
+func SetupCapabilities(config *types.Config) error {
+    capabilities := config.Capabilities
+    
+    if len(capabilities) == 0 {
+        // Drop all capabilities by default
+        log.Println("Dropping all capabilities")
+        if err := ClearAllCapabilities(); err != nil {
+            return fmt.Errorf("failed to clear all capabilities: %v", err)
+        }
+        return nil
+    }
+
+    // Keep only specified capabilities
+    log.Printf("Setting up capabilities: %v", capabilities)
+    
+    // First drop all capabilities
+    if err := ClearAllCapabilities(); err != nil {
+        return fmt.Errorf("failed to clear all capabilities: %v", err)
+    }
+    
+    // Then add back the ones specified
+    for _, cap := range capabilities {
+        capValue, exists := types.CapMap[cap]
+        if !exists {
+            return fmt.Errorf("unknown capability: %s", cap)
+        }
+        
+        if err := AddCapability(capValue); err != nil {
+            return fmt.Errorf("failed to add capability %s: %v", cap, err)
+        }
+        log.Printf("Added capability: %s", cap)
+    }
+    
+    return nil
+}
+
+// SetupCapabilitiesList provides an alternative function for direct capability list input
+func SetupCapabilitiesList(capabilities []string) error {
     if len(capabilities) == 0 {
         // Drop all capabilities by default
         log.Println("Dropping all capabilities")
@@ -66,14 +104,14 @@ func SetupCapabilities(capabilities []string) error {
 
 // ClearAllCapabilities removes all capabilities from the current process
 func ClearAllCapabilities() error {
-    // Clear all ambient capabilities using direct prctl syscall
-    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, types.PR_CAP_AMBIENT, types.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0, 0); errno != 0 {
+    // Clear all ambient capabilities using direct prctl unix
+    if _, _, errno := unix.Syscall6(unix.SYS_PRCTL, types.PR_CAP_AMBIENT, types.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0, 0); errno != 0 {
         return fmt.Errorf("failed to clear ambient capabilities: %v", errno)
     }
     
     // Clear bounding set capabilities
     for i := uintptr(0); i <= 40; i++ { // Loop through all possible capability values
-        syscall.Syscall6(syscall.SYS_PRCTL, types.PR_CAPBSET_DROP, i, 0, 0, 0, 0)
+        unix.Syscall6(unix.SYS_PRCTL, types.PR_CAPBSET_DROP, i, 0, 0, 0, 0)
     }
     
     return nil
@@ -82,7 +120,7 @@ func ClearAllCapabilities() error {
 // AddCapability adds a specific capability to the current process
 func AddCapability(capValue uintptr) error {
     // Keep capabilities across setuid operations
-    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, types.PR_SET_KEEPCAPS, 1, 0, 0, 0, 0); errno != 0 {
+    if _, _, errno := unix.Syscall6(unix.SYS_PRCTL, types.PR_SET_KEEPCAPS, 1, 0, 0, 0, 0); errno != 0 {
         return fmt.Errorf("failed to set PR_SET_KEEPCAPS: %v", errno)
     }
 
@@ -115,7 +153,7 @@ func AddCapability(capValue uintptr) error {
 
     // Set capability in the ambient set (inherited by child processes)
     // This must be done AFTER setting the capability in inheritable set
-    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, types.PR_CAP_AMBIENT, types.PR_CAP_AMBIENT_RAISE, capValue, 0, 0, 0); errno != 0 {
+    if _, _, errno := unix.Syscall6(unix.SYS_PRCTL, types.PR_CAP_AMBIENT, types.PR_CAP_AMBIENT_RAISE, capValue, 0, 0, 0); errno != 0 {
         return fmt.Errorf("failed to add capability to ambient set: %v", errno)
     }
 
@@ -152,7 +190,7 @@ func RemoveCapability(capValue uintptr) error {
     }
 
     // Remove from ambient set
-    if _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, types.PR_CAP_AMBIENT, types.PR_CAP_AMBIENT_LOWER, capValue, 0, 0, 0); errno != 0 {
+    if _, _, errno := unix.Syscall6(unix.SYS_PRCTL, types.PR_CAP_AMBIENT, types.PR_CAP_AMBIENT_LOWER, capValue, 0, 0, 0); errno != 0 {
         return fmt.Errorf("failed to remove capability from ambient set: %v", errno)
     }
 

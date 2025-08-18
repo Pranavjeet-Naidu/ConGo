@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 package cgroups 
 
 import(
@@ -9,7 +12,7 @@ import(
 	"congo/congo/internals/types"
 )
 
-func setupCgroups(config *types.Config) error {
+func SetupCgroups(config *types.Config) error {
     containerId := fmt.Sprintf("container-%d", os.Getpid())
     cgroupPaths := map[string]string{
         "pids":   filepath.Join("/sys/fs/cgroup/pids", containerId),

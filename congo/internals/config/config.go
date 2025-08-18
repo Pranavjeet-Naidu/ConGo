@@ -1,6 +1,9 @@
+//go:build linux
+// +build linux
+
 package config 
 
-import(
+import (
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -10,7 +13,7 @@ import(
 	"congo/congo/internals/container"
 )
 
-func parseConfig(args []string, isChild bool) (*types.Config, error) {
+func ParseConfig(args []string, isChild bool) (*types.Config, error) {
     config := &types.Config{
         EnvVars: make(map[string]string),
         Mounts:  make([]types.Mount, 0),
@@ -32,7 +35,7 @@ func parseConfig(args []string, isChild bool) (*types.Config, error) {
         },
         Interactive: false,
         Detached:    false,
-        StateDir:    container.getStateDir(),
+        StateDir:    container.GetStateDir(),
     }
 
     if len(args) < 7 {
@@ -154,7 +157,7 @@ func parseConfig(args []string, isChild bool) (*types.Config, error) {
 }
 
 
-func validateConfig(config *types.Config) error {
+func ValidateConfig(config *types.Config) error {
     if config == nil {
         return fmt.Errorf("config cannot be nil")
     }
