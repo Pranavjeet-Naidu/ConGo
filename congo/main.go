@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+    "syscall"
 
 	//"os/user"
 	"path/filepath"
@@ -354,14 +355,14 @@ func main() {
                 unix.CLONE_NEWNET |
                 unix.CLONE_NEWIPC |
                 unix.CLONE_NEWUSER,
-            UidMappings: []unix.SysProcIDMap{
+            UidMappings: []syscall.SysProcIDMap{
                 {
                     ContainerID: 0,
                     HostID:     os.Getuid(),
                     Size:       1,
                 },
             },
-            GidMappings: []unix.SysProcIDMap{
+            GidMappings: []syscall.SysProcIDMap{
                 {
                     ContainerID: 0,
                     HostID:     os.Getgid(),
@@ -378,7 +379,7 @@ func main() {
         // Update container state
         cfg.State.Status = "running"
         cfg.State.Pid = cmd.Process.Pid
-        if err := saveContainerState(cfg.ContainerID, cfg.State); err != nil {
+        if err := container.SaveContainerState(cfg.ContainerID, cfg.State); err != nil {
             log.Printf("Warning: failed to update container state: %v", err)
         }
         

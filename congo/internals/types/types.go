@@ -97,3 +97,11 @@ type ContainerState struct {
         PortMaps    []PortMapping
     }
 }
+
+// could have imported syscall and then used syscall.SysProcIDMap but decided to stick with this 
+// and continue using "golang.org/x/sys/unix"
+type SysProcIDMap struct {
+	ContainerID int
+	HostID      int
+	Size        int
+}
