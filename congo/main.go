@@ -348,13 +348,13 @@ func main() {
         cmd.Stdin = os.Stdin
         cmd.Stdout = os.Stdout
         cmd.Stderr = os.Stderr
-        cmd.SysProcAttr = &unix.SysProcAttr{
-            Cloneflags: unix.CLONE_NEWUTS |
-                unix.CLONE_NEWPID |
-                unix.CLONE_NEWNS |
-                unix.CLONE_NEWNET |
-                unix.CLONE_NEWIPC |
-                unix.CLONE_NEWUSER,
+        cmd.SysProcAttr = &syscall.SysProcAttr{
+            Cloneflags: syscall.CLONE_NEWUTS |
+                syscall.CLONE_NEWPID |
+                syscall.CLONE_NEWNS |
+                syscall.CLONE_NEWNET |
+                syscall.CLONE_NEWIPC |
+                syscall.CLONE_NEWUSER,
             UidMappings: []syscall.SysProcIDMap{
                 {
                     ContainerID: 0,

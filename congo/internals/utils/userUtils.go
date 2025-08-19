@@ -68,11 +68,6 @@ func LookupUser(username string) (int, int, error) {
     return uid, gid, nil
 }
 
-
-
-// lookupUserFallback provides manual /etc/passwd parsing as fallback
-
-
 // validateUserPermissions checks if the current process has permission to switch to the target user
 func ValidateUserPermissions(targetUID, targetGID int) error {
     currentUID := os.Getuid()
