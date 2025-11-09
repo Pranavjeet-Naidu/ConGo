@@ -9,8 +9,8 @@ import (
 	"strconv"
 	//"strings"
 
-	"congo/congo/internals/types"
-	"congo/congo/internals/container"
+	"congo/internals/types"
+	"congo/internals/container"
 )
 
 func ParseConfig(args []string, isChild bool) (*types.Config, error) {

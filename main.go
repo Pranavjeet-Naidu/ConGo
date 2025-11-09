@@ -21,11 +21,11 @@ import (
 	//"net"
 	"time"
 	//"encoding/json"
-	"congo/congo/internals/config"
-	"congo/congo/internals/container"
-	"congo/congo/internals/logging"
-	"congo/congo/internals/setups"
-	"congo/congo/internals/types"
+	"congo/internals/config"
+	"congo/internals/container"
+	"congo/internals/logging"
+	"congo/internals/setups"
+	"congo/internals/types"
 )
 
 func main() {

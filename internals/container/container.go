@@ -4,7 +4,7 @@
 package container
 
 import (
-	"congo/congo/internals/types"
+	"congo/internals/types"
 	"encoding/json"
 	"fmt"
 	"log"

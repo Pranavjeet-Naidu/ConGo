@@ -9,7 +9,7 @@ import(
 	"path/filepath"
 	"strconv"
 
-	"congo/congo/internals/types"
+	"congo/internals/types"
 )
 
 func SetupCgroups(config *types.Config) error {
