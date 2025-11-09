@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
     "golang.org/x/sys/unix"
-	"congo/congo/internals/types"
+	"congo/internals/types"
 )
 
 func SetupLayeredRootfs(config *types.Config) error {

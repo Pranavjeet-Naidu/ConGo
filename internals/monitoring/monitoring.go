@@ -11,7 +11,7 @@ import (
     "strings"
     "time"
     
-    "congo/congo/internals/types"
+    "congo/internals/types"
 )
 
 

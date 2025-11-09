@@ -7,7 +7,7 @@ package utils
 import (
 	"unsafe"
     
-	"congo/congo/internals/types"
+	"congo/internals/types"
 	"golang.org/x/sys/unix"
 )
 // capget syscall wrapper

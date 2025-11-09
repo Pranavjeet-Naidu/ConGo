@@ -11,7 +11,7 @@ import (
     "strconv"
     "strings"
     
-    "congo/congo/internals/types"
+    "congo/internals/types"
 )
 
 

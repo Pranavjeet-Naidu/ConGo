@@ -12,13 +12,13 @@ import (
     "strings"
     "golang.org/x/sys/unix"
     "path/filepath"
-    "congo/congo/internals/types"
-    "congo/congo/internals/capabilities"
-    "congo/congo/internals/utils"
-    "congo/congo/internals/filesystem"
-    //"congo/congo/internals/logging"
-    "congo/congo/internals/monitoring"
-    "congo/congo/internals/cgroups"
+    "congo/internals/types"
+    "congo/internals/capabilities"
+    "congo/internals/utils"
+    "congo/internals/filesystem"
+    //"congo/internals/logging"
+    "congo/internals/monitoring"
+    "congo/internals/cgroups"
 )
 
 func SetupUser(user string) error {

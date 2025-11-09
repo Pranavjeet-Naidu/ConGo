@@ -4,7 +4,7 @@
 package utils
 
 import (
-	"congo/congo/internals/types"
+	"congo/internals/types"
 	"fmt"
 	"log"
 	"os"

@@ -8,7 +8,7 @@ import (
     "log"
     "unsafe"
     "golang.org/x/sys/unix"
-    "congo/congo/internals/types"
+    "congo/internals/types"
 )
 
 // capget unix wrapper
