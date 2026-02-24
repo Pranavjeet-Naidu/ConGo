@@ -29,7 +29,7 @@ func SetupCgroups(config *types.Config) error {
         switch subsystem {
         case "pids":
             if config.ProcessLimit > 0{
-                if err := os.WriteFile(filepath.Join(path, "cgroup.procs"),[]byte(strconv.Itoa(os.Getpid())), 0644): err != nil{
+                if err := os.WriteFile(filepath.Join(path, "cgroup.procs"),[]byte(strconv.Itoa(os.Getpid())), 0644); err != nil{
                 return fmt.Errorf("failed to add process to cgroup %s: %v", subsystem, err)
             }
                 if err := os.WriteFile(filepath.Join(path, "pids.max"), []byte(strconv.Itoa(config.ProcessLimit)), 0644); err != nil {
