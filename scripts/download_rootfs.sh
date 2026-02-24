@@ -27,7 +27,7 @@ else
 fi
 
 # Create the rootfs directory and extract the tarball
-mkdir -p "$ROOT_DIR"
+mkdir -p "$ROOTFS_DIR"
 echo "Extracting rootfs to '${ROOTFS_DIR}'..."
 tar -xzf "$TMP_DIR/$ALPINE_TARBALL" -C "$ROOTFS_DIR"
 

@@ -36,19 +36,44 @@ func SetupLayeredRootfs(config *types.Config) error {
 }
 
 func SetupRootfs(rootfs string) error {
+    // Make root mount private
     if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
         return fmt.Errorf("error making root private: %v", err)
     }
 
+    // Bind mount the new rootfs onto itself
     if err := unix.Mount(rootfs, rootfs, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
         return fmt.Errorf("error binding rootfs: %v", err)
     }
 
-    if err := os.Chdir(rootfs); err != nil {
-        return fmt.Errorf("error changing directory to rootfs: %v", err)
+    // Create a directory for the old root inside the new rootfs
+    pivotDir := filepath.Join(rootfs, ".pivot_root")
+    if err := os.MkdirAll(pivotDir, 0755); err != nil {
+        return fmt.Errorf("error creating pivot dir: %v", err)
     }
 
-    if err := unix.Mount("proc", "proc", "proc", 0, ""); err != nil {
+    // pivot_root: swap the root filesystem
+    if err := unix.PivotRoot(rootfs, pivotDir); err != nil {
+        return fmt.Errorf("error pivoting root: %v", err)
+    }
+
+    // Change directory to new root
+    if err := os.Chdir("/"); err != nil {
+        return fmt.Errorf("error chdir to new root: %v", err)
+    }
+
+    // Unmount the old root
+    if err := unix.Unmount("/.pivot_root", unix.MNT_DETACH); err != nil {
+        return fmt.Errorf("error unmounting old root: %v", err)
+    }
+
+    // Remove the old root directory
+    if err := os.RemoveAll("/.pivot_root"); err != nil {
+        return fmt.Errorf("error removing pivot dir: %v", err)
+    }
+
+    // Mount proc inside the new root
+    if err := unix.Mount("proc", "/proc", "proc", 0, ""); err != nil {
         return fmt.Errorf("error mounting proc: %v", err)
     }
 

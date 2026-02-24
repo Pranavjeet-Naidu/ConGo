@@ -317,9 +317,6 @@ func main() {
         if err != nil {
             log.Fatalf("Error parsing config: %v", err)
         }
-        cfg.State.Network.ContainerIP = cfg.Network.ContainerIP
-		cfg.State.Network.Bridge = cfg.Network.Bridge
-		cfg.State.Network.PortMaps = cfg.Network.PortMaps
         if err := config.ValidateConfig(cfg); err != nil {
             log.Fatalf("Invalid config: %v", err)
         }
@@ -337,6 +334,10 @@ func main() {
             Command:   cfg.Command,
             RootDir:   cfg.Rootfs,
         }
+
+        cfg.State.Network.ContainerIP = cfg.Network.ContainerIP
+		cfg.State.Network.Bridge = cfg.Network.Bridge
+		cfg.State.Network.PortMaps = cfg.Network.PortMaps
         
         // Save the container state
         if err := container.SaveContainerState(cfg.ContainerID, cfg.State); err != nil {
