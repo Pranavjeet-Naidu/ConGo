@@ -64,7 +64,8 @@ type Config struct {
     State        ContainerState 
     Interactive  bool           
     Detached     bool           
-    StateDir     string         
+    StateDir     string  
+    Hostname     string       
 }
 
 type PortMapping struct {

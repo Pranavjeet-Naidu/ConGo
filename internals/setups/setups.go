@@ -204,7 +204,11 @@ func SetupContainer(config *types.Config) error {
     defer utils.Cleanup(config)
 
     // Set hostname
-    if err := unix.Sethostname([]byte("container")); err != nil {
+    hostname := config.Hostname
+    if hostname == ""{
+        hostname = "container"
+    }
+    if err := unix.Sethostname([]byte(hostname)); err != nil {
         return fmt.Errorf("error setting hostname: %v", err)
     }
 

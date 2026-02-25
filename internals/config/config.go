@@ -152,6 +152,12 @@ func ParseConfig(args []string, isChild bool) (*types.Config, error) {
 			}
 			config.ContainerID = args[currentIdx+1]
 			currentIdx += 2
+		case "hostname":
+			if currentIdx+1 >= cmdIndex {
+				return nil, fmt.Errorf("missing hostname")
+			}
+			config.Hostname = args[currentIdx+1]
+			currentIdx += 2
 
 		default:
 			return nil, fmt.Errorf("unknown option: %s", args[currentIdx])
