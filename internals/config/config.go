@@ -152,7 +152,7 @@ func ParseConfig(args []string, isChild bool) (*types.Config, error) {
 			}
 			config.ContainerID = args[currentIdx+1]
 			currentIdx += 2
-		case "hostname":
+		case "--hostname":
 			if currentIdx+1 >= cmdIndex {
 				return nil, fmt.Errorf("missing hostname")
 			}

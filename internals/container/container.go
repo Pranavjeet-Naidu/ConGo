@@ -437,33 +437,30 @@ func StopContainer(containerID string, force bool) error {
 		return fmt.Errorf("failed to send signal to container: %v", err)
 	}
 
-	// Wait for the process to exit (with timeout)
-	done := make(chan error)
-	go func() {
-		_, err := process.Wait()
-		done <- err
-	}()
+	// before: os.findprocess + process.wait(), issue is this doesn't work for non child processes on linux
+	// so now better to go for polling instead 
+	timeout := time.After(10 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
-	// Wait for process to exit or timeout
-	var waitErr error
-	select {
-	case waitErr = <-done:
-		// Process exited
-	case <-time.After(10 * time.Second):
-		if !force {
-			// Timeout, try SIGKILL
-			log.Printf("Container didn't exit after SIGTERM, sending SIGKILL")
-			if err := process.Kill(); err != nil {
-				return fmt.Errorf("failed to forcefully kill container: %v", err)
+	exited := false
+	for !exited {
+		select {
+		case <-timeout:
+			if !force {
+				return fmt.Errorf("container %s did not stop within timeout", containerID)
 			}
-			waitErr = <-done
-		} else {
-			return fmt.Errorf("container failed to exit even after SIGKILL")
+			// Force kill
+			if err := process.Kill(); err != nil {
+				return fmt.Errorf("failed to kill container: %v", err)
+			}
+			exited = true
+		case <-ticker.C:
+			// Check if process is still running
+			if _, err := process.Wait(); err != nil {
+				exited = true
+			}
 		}
-	}
-
-	if waitErr != nil {
-		log.Printf("Container exited with error: %v", waitErr)
 	}
 
 	// Clean up network resources
