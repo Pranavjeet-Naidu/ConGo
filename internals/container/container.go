@@ -457,7 +457,7 @@ func StopContainer(containerID string, force bool) error {
 			exited = true
 		case <-ticker.C:
 			// Check if process is still running
-			if _, err := process.Wait(); err != nil {
+			if _, err := process.Signal(syscall.Signal(0)); err != nil {
 				exited = true
 			}
 		}

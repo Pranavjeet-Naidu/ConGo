@@ -28,18 +28,14 @@ func SetupCgroups(config *types.Config) error {
 
         switch subsystem {
         case "pids":
-            if config.ProcessLimit > 0{
-                if err := os.WriteFile(filepath.Join(path, "cgroup.procs"),[]byte(strconv.Itoa(os.Getpid())), 0644); err != nil{
-                return fmt.Errorf("failed to add process to cgroup %s: %v", subsystem, err)
-            }
+            if config.ProcessLimit > 0 {
                 if err := os.WriteFile(filepath.Join(path, "pids.max"), []byte(strconv.Itoa(config.ProcessLimit)), 0644); err != nil {
-                return fmt.Errorf("failed to set pids.max: %v", err)
-            }
+                    return fmt.Errorf("failed to set pids.max: %v", err)
+                }
                 if err := os.WriteFile(filepath.Join(path, "notify_on_release"), []byte("1"), 0644); err != nil {
-                return fmt.Errorf("failed to set notify_on_release: %v", err)
+                    return fmt.Errorf("failed to set notify_on_release: %v", err)
+                }
             }
-            }
-
         case "memory":
             if err := os.WriteFile(filepath.Join(path, "memory.limit_in_bytes"), []byte(config.MemoryLimit), 0644); err != nil {
                 return fmt.Errorf("failed to set memory.limit_in_bytes: %v", err)
@@ -50,6 +46,11 @@ func SetupCgroups(config *types.Config) error {
             }
         case "blkio":
             // for now unnecessary , maybe for later :D
+        }
+
+        // Add current process to every cgroup subsystem
+        if err := os.WriteFile(filepath.Join(path, "cgroup.procs"), []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+            return fmt.Errorf("failed to add process to cgroup %s: %v", subsystem, err)
         }
     }
 
